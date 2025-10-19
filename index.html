@@ -1,35 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
     <meta charset="utf-8" />
     <title>Zoom Meeting</title>
 
-    <!-- ✅ Zoom Meeting SDK (NOT Embedded) -->
+    <!-- ✅ Load Zoom Meeting SDK -->
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react-dom.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/redux.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/redux-thunk.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/lodash.min.js"></script>
+
+    <!-- ✅ Main SDK script -->
     <script src="https://source.zoom.us/zoom-meeting-2.18.0.min.js"></script>
 
-    <link
-      type="text/css"
-      rel="stylesheet"
-      href="https://source.zoom.us/2.18.0/css/bootstrap.css"
-    />
-    <link
-      type="text/css"
-      rel="stylesheet"
-      href="https://source.zoom.us/2.18.0/css/react-select.css"
-    />
-
     <style>
-      html,
-      body {
-        height: 100%;
+      html, body {
         margin: 0;
         padding: 0;
-        background-color: #000;
+        height: 100%;
       }
       #zmmtg-root {
         height: 100%;
@@ -37,12 +26,14 @@
       }
     </style>
   </head>
+
   <body>
     <div id="zmmtg-root"></div>
     <div id="aria-notify-area"></div>
 
     <script>
-      async function startMeeting() {
+      // ✅ Wait for DOM to load
+      window.addEventListener("load", async () => {
         const params = new URLSearchParams(window.location.search);
         const meetingNumber = params.get("meetingNumber");
         const signature = params.get("signature");
@@ -50,45 +41,35 @@
         const name = decodeURIComponent(params.get("name") || "Guest");
 
         if (!meetingNumber || !signature || !sdkKey) {
-          alert("Missing meeting parameters.");
+          document.body.innerHTML += `<p style="text-align:center;color:red;">Missing parameters!</p>`;
           return;
         }
 
-        // ✅ Preload SDK assets
+        console.log("ZoomMtg:", ZoomMtg);
         ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
         ZoomMtg.preLoadWasm();
-        ZoomMtg.prepareWebSDK();
-
-        console.log("🔹 Initializing Zoom Meeting SDK...");
+        ZoomMtg.prepareJssdk();
 
         ZoomMtg.init({
-          leaveUrl: window.location.origin,
-          success: () => {
-            console.log("✅ Zoom SDK initialized, joining meeting...");
+          leaveUrl: "https://zoom.us", // or your own redirect
+          success: function () {
+            console.log("✅ Zoom SDK initialized");
 
             ZoomMtg.join({
               signature: signature,
               sdkKey: sdkKey,
               meetingNumber: meetingNumber,
               userName: name,
-              passWord: "", // if your meeting has a password, add it here
-              success: (res) => {
-                console.log("✅ Joined meeting successfully!", res);
-              },
-              error: (err) => {
-                console.error("❌ Failed to join meeting:", err);
-                alert("Failed to join meeting. " + (err?.errorMessage || ""));
-              },
+              password: "",
+              success: () => console.log("✅ Joined meeting successfully"),
+              error: (err) => console.error("❌ Join error:", err),
             });
           },
-          error: (err) => {
-            console.error("❌ Zoom SDK initialization failed:", err);
-            alert("Failed to initialize Zoom SDK.");
+          error: function (err) {
+            console.error("❌ Init error:", err);
           },
         });
-      }
-
-      startMeeting();
+      });
     </script>
   </body>
 </html>
