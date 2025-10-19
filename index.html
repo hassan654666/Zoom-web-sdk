@@ -1,23 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Zoom Test</title>
+    <title>Zoom Meeting</title>
+
+    <!-- ✅ Zoom Meeting SDK (NOT Embedded) -->
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react-dom.min.js"></script>
-    <script src="https://source.zoom.us/zoom-meeting-embedded-2.18.0.min.js"></script>
+    <script src="https://source.zoom.us/2.18.0/lib/vendor/redux.min.js"></script>
+    <script src="https://source.zoom.us/2.18.0/lib/vendor/redux-thunk.min.js"></script>
+    <script src="https://source.zoom.us/2.18.0/lib/vendor/lodash.min.js"></script>
+    <script src="https://source.zoom.us/zoom-meeting-2.18.0.min.js"></script>
+
+    <link
+      type="text/css"
+      rel="stylesheet"
+      href="https://source.zoom.us/2.18.0/css/bootstrap.css"
+    />
+    <link
+      type="text/css"
+      rel="stylesheet"
+      href="https://source.zoom.us/2.18.0/css/react-select.css"
+    />
+
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #000;
+      }
+      #zmmtg-root {
+        height: 100%;
+        width: 100%;
+      }
+    </style>
   </head>
   <body>
-    <div id="zmmtg-root" style="height: 100vh;"></div>
+    <div id="zmmtg-root"></div>
+    <div id="aria-notify-area"></div>
+
     <script>
-      const client = ZoomMtgEmbedded.createClient();
-      client.init({ zoomAppRoot: document.getElementById("zmmtg-root") });
-      client.join({
-        signature: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZGtLZXkiOiI0eEU1MFgydVRfVzVrWlllTG1nVGpRIiwibW4iOiI3OTIyNTYyOTcwOCIsInJvbGUiOjAsImlhdCI6MTc2MDkxMjA3MCwiZXhwIjoxNzYwOTEzMjcwLCJhcHBLZXkiOiI0eEU1MFgydVRfVzVrWlllTG1nVGpRIiwidG9rZW5FeHAiOjE3NjA5MTMyNzB9.Q6EjBc5Ce1aaNna0zlDYjCW2ZCycGsDuvxMphfG0Csw",
-        sdkKey: "4xE50X2uT_W5kZYeLmgTjQ",
-        meetingNumber: "79225629708",
-        userName: "Tester",
-      });
+      async function startMeeting() {
+        const params = new URLSearchParams(window.location.search);
+        const meetingNumber = params.get("meetingNumber");
+        const signature = params.get("signature");
+        const sdkKey = params.get("sdkKey");
+        const name = decodeURIComponent(params.get("name") || "Guest");
+
+        if (!meetingNumber || !signature || !sdkKey) {
+          alert("Missing meeting parameters.");
+          return;
+        }
+
+        // ✅ Preload SDK assets
+        ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
+        ZoomMtg.preLoadWasm();
+        ZoomMtg.prepareWebSDK();
+
+        console.log("🔹 Initializing Zoom Meeting SDK...");
+
+        ZoomMtg.init({
+          leaveUrl: window.location.origin,
+          success: () => {
+            console.log("✅ Zoom SDK initialized, joining meeting...");
+
+            ZoomMtg.join({
+              signature: signature,
+              sdkKey: sdkKey,
+              meetingNumber: meetingNumber,
+              userName: name,
+              passWord: "", // if your meeting has a password, add it here
+              success: (res) => {
+                console.log("✅ Joined meeting successfully!", res);
+              },
+              error: (err) => {
+                console.error("❌ Failed to join meeting:", err);
+                alert("Failed to join meeting. " + (err?.errorMessage || ""));
+              },
+            });
+          },
+          error: (err) => {
+            console.error("❌ Zoom SDK initialization failed:", err);
+            alert("Failed to initialize Zoom SDK.");
+          },
+        });
+      }
+
+      startMeeting();
     </script>
   </body>
 </html>
