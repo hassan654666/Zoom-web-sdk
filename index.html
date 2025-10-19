@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Zoom Meeting</title>
+    <script src="https://source.zoom.us/2.18.0/lib/vendor/react.min.js"></script>
+    <script src="https://source.zoom.us/2.18.0/lib/vendor/react-dom.min.js"></script>
+    <script src="https://source.zoom.us/zoom-meeting-embedded-2.18.0.min.js"></script>
+    <style>
+      body, html { margin: 0; padding: 0; height: 100%; background: #000; }
+      #zmmtg-root { height: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="zmmtg-root"></div>
+    <script>
+      async function joinMeeting() {
+        const params = new URLSearchParams(window.location.search);
+        const meetingNumber = params.get("meetingNumber");
+        const signature = params.get("signature");
+        const sdkKey = params.get("sdkKey");
+        const name = params.get("name");
+
+        const client = ZoomMtgEmbedded.createClient();
+        const root = document.getElementById("zmmtg-root");
+        client.init({ zoomAppRoot: root, language: "en-US" });
+
+        await client.join({
+          signature,
+          sdkKey,
+          meetingNumber,
+          userName: name,
+          password: "",
+        });
+      }
+      joinMeeting();
+    </script>
+  </body>
+</html>
