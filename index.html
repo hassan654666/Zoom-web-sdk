@@ -7,8 +7,16 @@
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react-dom.min.js"></script>
     <script src="https://source.zoom.us/zoom-meeting-embedded-2.18.0.min.js"></script>
     <style>
-      body, html { margin: 0; padding: 0; height: 100%; background: #000; }
-      #zmmtg-root { height: 100%; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #zmmtg-root {
+        height: 100%;
+      }
     </style>
   </head>
   <body>
@@ -19,20 +27,36 @@
         const meetingNumber = params.get("meetingNumber");
         const signature = params.get("signature");
         const sdkKey = params.get("sdkKey");
-        const name = params.get("name");
+        const name = decodeURIComponent(params.get("name") || "Guest");
 
         const client = ZoomMtgEmbedded.createClient();
         const root = document.getElementById("zmmtg-root");
-        client.init({ zoomAppRoot: root, language: "en-US" });
 
-        await client.join({
-          signature,
-          sdkKey,
-          meetingNumber,
-          userName: name,
-          password: "",
+        console.log("🔹 Initializing Zoom Web SDK...");
+        await client.init({
+          zoomAppRoot: root,
+          language: "en-US",
+          customize: {
+            video: { isResizable: true, viewSizes: { default: { width: 100, height: 100 } } },
+          },
         });
+
+        console.log("🔹 Joining meeting:", meetingNumber);
+        try {
+          await client.join({
+            signature,
+            sdkKey,
+            meetingNumber,
+            userName: name,
+            password: "",
+          });
+          console.log("✅ Joined meeting successfully!");
+        } catch (e) {
+          console.error("❌ Failed to join meeting:", e);
+          document.body.innerHTML += `<p style="color:white;text-align:center;margin-top:20px;">Failed to join meeting.<br>${e.message}</p>`;
+        }
       }
+
       joinMeeting();
     </script>
   </body>
