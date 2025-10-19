@@ -2,62 +2,22 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Zoom Meeting</title>
+    <title>Zoom Test</title>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react-dom.min.js"></script>
     <script src="https://source.zoom.us/zoom-meeting-embedded-2.18.0.min.js"></script>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        background: #000;
-        overflow: hidden;
-      }
-      #zmmtg-root {
-        height: 100%;
-      }
-    </style>
   </head>
   <body>
-    <div id="zmmtg-root"></div>
+    <div id="zmmtg-root" style="height: 100vh;"></div>
     <script>
-      async function joinMeeting() {
-        const params = new URLSearchParams(window.location.search);
-        const meetingNumber = params.get("meetingNumber");
-        const signature = params.get("signature");
-        const sdkKey = params.get("sdkKey");
-        const name = decodeURIComponent(params.get("name") || "Guest");
-
-        const client = ZoomMtgEmbedded.createClient();
-        const root = document.getElementById("zmmtg-root");
-
-        console.log("🔹 Initializing Zoom Web SDK...");
-        await client.init({
-          zoomAppRoot: root,
-          language: "en-US",
-          customize: {
-            video: { isResizable: true, viewSizes: { default: { width: 100, height: 100 } } },
-          },
-        });
-
-        console.log("🔹 Joining meeting:", meetingNumber);
-        try {
-          await client.join({
-            signature,
-            sdkKey,
-            meetingNumber,
-            userName: name,
-            password: "",
-          });
-          console.log("✅ Joined meeting successfully!");
-        } catch (e) {
-          console.error("❌ Failed to join meeting:", e);
-          document.body.innerHTML += `<p style="color:white;text-align:center;margin-top:20px;">Failed to join meeting.<br>${e.message}</p>`;
-        }
-      }
-
-      joinMeeting();
+      const client = ZoomMtgEmbedded.createClient();
+      client.init({ zoomAppRoot: document.getElementById("zmmtg-root") });
+      client.join({
+        signature: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZGtLZXkiOiI0eEU1MFgydVRfVzVrWlllTG1nVGpRIiwibW4iOiI3OTIyNTYyOTcwOCIsInJvbGUiOjAsImlhdCI6MTc2MDkxMjA3MCwiZXhwIjoxNzYwOTEzMjcwLCJhcHBLZXkiOiI0eEU1MFgydVRfVzVrWlllTG1nVGpRIiwidG9rZW5FeHAiOjE3NjA5MTMyNzB9.Q6EjBc5Ce1aaNna0zlDYjCW2ZCycGsDuvxMphfG0Csw",
+        sdkKey: "4xE50X2uT_W5kZYeLmgTjQ",
+        meetingNumber: "79225629708",
+        userName: "Tester",
+      });
     </script>
   </body>
 </html>
