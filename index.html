@@ -50,6 +50,14 @@
           leaveUrl: "https://hassan654666.github.io/Zoom-web-sdk/",
           success: function () {
             console.log("✅ Zoom SDK initialized");
+            console.log("Joining meeting with:", {
+              meetingNumber,
+              password,
+              name,
+              sdkKey,
+              signature,
+            });
+
             ZoomMtg.join({
               signature,
               sdkKey,
@@ -66,6 +74,7 @@
     </script>
   </body>
 </html>
+
 
 
 
