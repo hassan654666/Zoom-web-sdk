@@ -47,12 +47,10 @@
         }
 
         try {
-          const client = window.ZoomMtgEmbedded.createClient();
+          // ✅ Use correct global object for v3.x
+          const client = window.WebMeetingSDK.createClient();
 
-          // Create meeting container
           const meetingSDKElement = document.getElementById("meetingSDKElement");
-
-          console.log("✅ Initializing Embedded SDK...");
           await client.init({
             zoomAppRoot: meetingSDKElement,
             language: "en-US",
@@ -62,7 +60,6 @@
             },
           });
 
-          console.log("✅ Joining meeting...");
           await client.join({
             sdkKey,
             signature,
@@ -79,5 +76,6 @@
         }
       });
     </script>
+
   </body>
 </html>
