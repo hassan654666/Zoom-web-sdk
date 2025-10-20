@@ -4,17 +4,16 @@
     <meta charset="utf-8" />
     <title>Zoom Meeting</title>
 
-    <!-- ✅ Load Zoom Meeting SDK -->
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/react-dom.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/redux.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/redux-thunk.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/lodash.min.js"></script>
 
-    <!-- ✅ Main SDK script -->
     <script src="https://source.zoom.us/zoom-meeting-2.18.0.min.js"></script>
 
     <style>
+      /* Ensure the containers take up full space for the meeting UI */
       html, body {
         margin: 0;
         padding: 0;
@@ -32,26 +31,33 @@
     <div id="aria-notify-area"></div>
 
     <script>
-      // ✅ Wait for DOM to load
-      window.addEventListener("load", async () => {
+      // FIX: Use 'DOMContentLoaded' or (better) run the code directly, 
+      // as the script is placed after the #zmmtg-root element.
+      // We will stick to 'DOMContentLoaded' to ensure all elements are ready.
+      window.addEventListener("DOMContentLoaded", async () => {
         const params = new URLSearchParams(window.location.search);
         const meetingNumber = params.get("meetingNumber");
         const signature = params.get("signature");
         const sdkKey = params.get("sdkKey");
+        const password = params.get("password");
         const name = decodeURIComponent(params.get("name") || "Guest");
 
         if (!meetingNumber || !signature || !sdkKey) {
-          document.body.innerHTML += `<p style="text-align:center;color:red;">Missing parameters!</p>`;
+          document.body.innerHTML += `<p style="text-align:center;color:red;">Missing parameters: meetingNumber, signature, and sdkKey are required.</p>`;
           return;
         }
 
         console.log("ZoomMtg:", ZoomMtg);
+        
+        // 💡 BEST PRACTICE: Set the library path before any other calls
         ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
+        
+        // These calls load WebAssembly and other assets asynchronously
         ZoomMtg.preLoadWasm();
         ZoomMtg.prepareJssdk();
 
         ZoomMtg.init({
-          leaveUrl: "https://zoom.us", // or your own redirect
+          leaveUrl: window.location.origin, // Redirect to your own domain root
           success: function () {
             console.log("✅ Zoom SDK initialized");
 
@@ -60,7 +66,7 @@
               sdkKey: sdkKey,
               meetingNumber: meetingNumber,
               userName: name,
-              password: "",
+              password: password, // Pass the actual meeting password if one exists
               success: () => console.log("✅ Joined meeting successfully"),
               error: (err) => console.error("❌ Join error:", err),
             });
