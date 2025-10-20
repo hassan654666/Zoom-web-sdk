@@ -4,77 +4,65 @@
     <meta charset="utf-8" />
     <title>Zoom Meeting</title>
 
-    <script src="https://source.zoom.us/2.18.0/lib/vendor/react.min.js"></script>
-    <script src="https://source.zoom.us/2.18.0/lib/vendor/react-dom.min.js"></script>
-    <script src="https://source.zoom.us/2.18.0/lib/vendor/redux.min.js"></script>
-    <script src="https://source.zoom.us/2.18.0/lib/vendor/redux-thunk.min.js"></script>
-    <script src="https://source.zoom.us/2.18.0/lib/vendor/lodash.min.js"></script>
-    <script src="https://source.zoom.us/zoom-meeting-2.18.0.min.js"></script>
+    <script>
+      // Must be declared before loading the SDK
+      window.ZoomMtg = window.ZoomMtg || {};
+      window.ZoomMtg.setZoomJSLib &&
+        window.ZoomMtg.setZoomJSLib("https://source.zoom.us/3.12.0/lib", "/av");
+    </script>
+
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/zoom-meeting-3.12.0.min.js"></script>
 
     <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-      }
-      #zmmtg-root {
-        height: 100%;
-        width: 100%;
-      }
+      html, body { height: 100%; margin: 0; padding: 0; }
+      #zmmtg-root { height: 100%; width: 100%; }
     </style>
   </head>
-
   <body>
     <div id="zmmtg-root"></div>
     <div id="aria-notify-area"></div>
 
     <script>
-      const params = new URLSearchParams(window.location.search);
-      const meetingNumber = params.get("meetingNumber");
-      const signature = params.get("signature");
-      const sdkKey = params.get("sdkKey");
-      const name = decodeURIComponent(params.get("name") || "Guest");
-      const password = params.get("password") || "";
+      window.addEventListener("DOMContentLoaded", () => {
+        const params = new URLSearchParams(window.location.search);
+        const meetingNumber = params.get("meetingNumber");
+        const signature = params.get("signature");
+        const sdkKey = params.get("sdkKey");
+        const name = decodeURIComponent(params.get("name") || "Guest");
+        const password = params.get("password") || "";
 
-      // 💡 FIX for SyntaxError: Illegal return statement:
-      // We check for required parameters. If they are missing, we only display the error 
-      // and do NOT run the subsequent ZoomMtg code.
-      if (!meetingNumber || !signature || !sdkKey) {
-        // This runs if parameters are missing
-        document.body.innerHTML = `<p style="text-align:center;color:red;">
-            Missing required URL parameters.
-        </p>`;
-        // The script naturally stops here, no 'return' needed.
-      } else {
-        // This runs ONLY if all parameters are present
-        console.log("ZoomMtg:", ZoomMtg);
+        if (!meetingNumber || !signature || !sdkKey) {
+          document.body.innerHTML = `<p style="color:red;text-align:center">
+            ❌ Missing required parameters.
+          </p>`;
+          return;
+        }
 
-        // This resolves the previous "Cannot read properties of null (reading 'append')"
-        // by running this logic immediately after the DOM elements are parsed.
-        ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
         ZoomMtg.preLoadWasm();
-        ZoomMtg.prepareJssdk();
+        ZoomMtg.prepareWebSDK();
 
         ZoomMtg.init({
-          leaveUrl: window.location.origin,
+          leaveUrl: "https://hassan654666.github.io/Zoom-web-sdk/",
           success: function () {
             console.log("✅ Zoom SDK initialized");
-
             ZoomMtg.join({
-              signature: signature,
-              sdkKey: sdkKey,
-              meetingNumber: meetingNumber,
+              signature,
+              sdkKey,
+              meetingNumber,
               userName: name,
-              password: password,
-              success: () => console.log("✅ Joined meeting successfully"),
+              password,
+              success: () => console.log("✅ Joined successfully"),
               error: (err) => console.error("❌ Join error:", err),
             });
           },
-          error: function (err) {
-            console.error("❌ Init error:", err);
-          },
+          error: (err) => console.error("❌ Init error:", err),
         });
-      }
+      });
     </script>
   </body>
 </html>
