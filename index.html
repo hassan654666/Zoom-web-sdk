@@ -13,12 +13,12 @@
     <script src="https://source.zoom.us/zoom-meeting-2.18.0.min.js"></script>
 
     <style>
-      /* Ensure the containers take up full space for the meeting UI */
       html, body {
         margin: 0;
         padding: 0;
         height: 100%;
       }
+      /* Ensure zmmtg-root has dimensions for the meeting to render */
       #zmmtg-root {
         height: 100%;
         width: 100%;
@@ -31,50 +31,48 @@
     <div id="aria-notify-area"></div>
 
     <script>
-      // FIX: Use 'DOMContentLoaded' or (better) run the code directly, 
-      // as the script is placed after the #zmmtg-root element.
-      // We will stick to 'DOMContentLoaded' to ensure all elements are ready.
-      window.addEventListener("DOMContentLoaded", async () => {
-        const params = new URLSearchParams(window.location.search);
-        const meetingNumber = params.get("meetingNumber");
-        const signature = params.get("signature");
-        const sdkKey = params.get("sdkKey");
-        const password = params.get("password");
-        const name = decodeURIComponent(params.get("name") || "Guest");
+      // FIX: Remove the DOMContentLoaded listener.
+      // Since the script is at the end of the <body>, the DOM is guaranteed to be loaded.
 
-        if (!meetingNumber || !signature || !sdkKey) {
-          document.body.innerHTML += `<p style="text-align:center;color:red;">Missing parameters: meetingNumber, signature, and sdkKey are required.</p>`;
-          return;
-        }
+      const params = new URLSearchParams(window.location.search);
+      const meetingNumber = params.get("meetingNumber");
+      const signature = params.get("signature");
+      const sdkKey = params.get("sdkKey");
+      const name = decodeURIComponent(params.get("name") || "Guest");
+      const password = params.get("password") || ""; // Include password from URL
 
-        console.log("ZoomMtg:", ZoomMtg);
-        
-        // 💡 BEST PRACTICE: Set the library path before any other calls
-        ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
-        
-        // These calls load WebAssembly and other assets asynchronously
-        ZoomMtg.preLoadWasm();
-        ZoomMtg.prepareJssdk();
+      if (!meetingNumber || !signature || !sdkKey) {
+        document.body.innerHTML = `<p style="text-align:center;color:red;">Missing required URL parameters.</p>`;
+        return;
+      }
 
-        ZoomMtg.init({
-          leaveUrl: window.location.origin, // Redirect to your own domain root
-          success: function () {
-            console.log("✅ Zoom SDK initialized");
+      console.log("ZoomMtg:", ZoomMtg);
 
-            ZoomMtg.join({
-              signature: signature,
-              sdkKey: sdkKey,
-              meetingNumber: meetingNumber,
-              userName: name,
-              password: password, // Pass the actual meeting password if one exists
-              success: () => console.log("✅ Joined meeting successfully"),
-              error: (err) => console.error("❌ Join error:", err),
-            });
-          },
-          error: function (err) {
-            console.error("❌ Init error:", err);
-          },
-        });
+      // 💡 FIX 1: Set the library path first. This must be the very first call.
+      ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
+      
+      // FIX 2: Pre-load and preparation calls are executed synchronously now.
+      ZoomMtg.preLoadWasm();
+      ZoomMtg.prepareJssdk();
+
+      ZoomMtg.init({
+        leaveUrl: window.location.origin,
+        success: function () {
+          console.log("✅ Zoom SDK initialized");
+
+          ZoomMtg.join({
+            signature: signature,
+            sdkKey: sdkKey,
+            meetingNumber: meetingNumber,
+            userName: name,
+            password: password, // Pass the password variable
+            success: () => console.log("✅ Joined meeting successfully"),
+            error: (err) => console.error("❌ Join error:", err),
+          });
+        },
+        error: function (err) {
+          console.error("❌ Init error:", err);
+        },
       });
     </script>
   </body>
