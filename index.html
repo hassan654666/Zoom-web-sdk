@@ -9,7 +9,6 @@
     <script src="https://source.zoom.us/2.18.0/lib/vendor/redux.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/redux-thunk.min.js"></script>
     <script src="https://source.zoom.us/2.18.0/lib/vendor/lodash.min.js"></script>
-
     <script src="https://source.zoom.us/zoom-meeting-2.18.0.min.js"></script>
 
     <style>
@@ -18,7 +17,6 @@
         padding: 0;
         height: 100%;
       }
-      /* Ensure zmmtg-root has dimensions for the meeting to render */
       #zmmtg-root {
         height: 100%;
         width: 100%;
@@ -31,49 +29,52 @@
     <div id="aria-notify-area"></div>
 
     <script>
-      // FIX: Remove the DOMContentLoaded listener.
-      // Since the script is at the end of the <body>, the DOM is guaranteed to be loaded.
-
       const params = new URLSearchParams(window.location.search);
       const meetingNumber = params.get("meetingNumber");
       const signature = params.get("signature");
       const sdkKey = params.get("sdkKey");
       const name = decodeURIComponent(params.get("name") || "Guest");
-      const password = params.get("password") || ""; // Include password from URL
+      const password = params.get("password") || "";
 
+      // 💡 FIX for SyntaxError: Illegal return statement:
+      // We check for required parameters. If they are missing, we only display the error 
+      // and do NOT run the subsequent ZoomMtg code.
       if (!meetingNumber || !signature || !sdkKey) {
-        document.body.innerHTML = `<p style="text-align:center;color:red;">Missing required URL parameters.</p>`;
-        return;
+        // This runs if parameters are missing
+        document.body.innerHTML = `<p style="text-align:center;color:red;">
+            Missing required URL parameters.
+        </p>`;
+        // The script naturally stops here, no 'return' needed.
+      } else {
+        // This runs ONLY if all parameters are present
+        console.log("ZoomMtg:", ZoomMtg);
+
+        // This resolves the previous "Cannot read properties of null (reading 'append')"
+        // by running this logic immediately after the DOM elements are parsed.
+        ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
+        ZoomMtg.preLoadWasm();
+        ZoomMtg.prepareJssdk();
+
+        ZoomMtg.init({
+          leaveUrl: window.location.origin,
+          success: function () {
+            console.log("✅ Zoom SDK initialized");
+
+            ZoomMtg.join({
+              signature: signature,
+              sdkKey: sdkKey,
+              meetingNumber: meetingNumber,
+              userName: name,
+              password: password,
+              success: () => console.log("✅ Joined meeting successfully"),
+              error: (err) => console.error("❌ Join error:", err),
+            });
+          },
+          error: function (err) {
+            console.error("❌ Init error:", err);
+          },
+        });
       }
-
-      console.log("ZoomMtg:", ZoomMtg);
-
-      // 💡 FIX 1: Set the library path first. This must be the very first call.
-      ZoomMtg.setZoomJSLib("https://source.zoom.us/2.18.0/lib", "/av");
-      
-      // FIX 2: Pre-load and preparation calls are executed synchronously now.
-      ZoomMtg.preLoadWasm();
-      ZoomMtg.prepareJssdk();
-
-      ZoomMtg.init({
-        leaveUrl: window.location.origin,
-        success: function () {
-          console.log("✅ Zoom SDK initialized");
-
-          ZoomMtg.join({
-            signature: signature,
-            sdkKey: sdkKey,
-            meetingNumber: meetingNumber,
-            userName: name,
-            password: password, // Pass the password variable
-            success: () => console.log("✅ Joined meeting successfully"),
-            error: (err) => console.error("❌ Join error:", err),
-          });
-        },
-        error: function (err) {
-          console.error("❌ Init error:", err);
-        },
-      });
     </script>
   </body>
 </html>
