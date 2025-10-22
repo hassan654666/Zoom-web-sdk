@@ -108,12 +108,17 @@
         const maxJoinAttempts = 3;
 
         // Configuration from React Native
-        const meetingNumber = "${safeMeetingId}";
-        const signature = "${safeSignature}";
-        const sdkKey = "${safeSdkKey}";
-        const userName = "${userName.replace(/"/g, '\\"')}";
-        const password = "${safePassword}";
-        const directLink = "${directZoomUrl}";
+        const params = new URLSearchParams(window.location.search);
+        const meetingNumber = params.get("meetingNumber");
+        const signature = decodeURIComponent(params.get("signature") || "");
+        const sdkKey = params.get("sdkKey");
+        const userName = decodeURIComponent(params.get("name") || "Guest");
+        const password = decodeURIComponent(params.get("password") || "").trim();
+
+        if (!meetingNumber || !signature || !sdkKey) {
+          document.getElementById("error").innerText = "❌ Missing parameters.";
+          return;
+        }
 
         console.log('Zoom SDK Configuration:', {
             meetingNumber,
