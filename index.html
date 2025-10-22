@@ -21,13 +21,20 @@
       html,
       body {
         margin: 0;
+        padding: 0;
         height: 100%;
+        width: 100%;
         background: #000;
         overflow: hidden;
         font-family: "Inter", sans-serif;
       }
 
       #meetingSDKElement {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         height: 100vh;
         width: 100vw;
         display: flex;
@@ -51,7 +58,6 @@
         transform: translate(-50%, -50%);
         color: white;
         font-size: 16px;
-        font-family: sans-serif;
       }
 
       #leaveBtn {
@@ -65,12 +71,40 @@
         border-radius: 8px;
         font-size: 14px;
         cursor: pointer;
-        z-index: 1000;
-        transition: background 0.2s;
+        z-index: 10000;
       }
 
       #leaveBtn:hover {
         background-color: #ff5e57;
+      }
+
+      /* Full-screen toggle button for each participant */
+      .fullscreen-btn {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        background: rgba(0, 0, 0, 0.6);
+        border: none;
+        color: white;
+        padding: 6px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        z-index: 9999;
+      }
+
+      .fullscreen-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .participant-tile.fullscreen {
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 9998;
+        background-color: #000;
       }
 
       @media (max-width: 600px) {
@@ -86,7 +120,6 @@
     <div id="meetingSDKElement"></div>
     <div id="errorBox"></div>
     <div id="loading">Joining meeting...</div>
-
     <button id="leaveBtn">Leave</button>
 
     <script>
@@ -118,8 +151,12 @@
             patchJsMedia: true,
             customize: {
               video: {
-                isResizable: false,
-                popper: { disable: true },
+                viewSizes: {
+                  default: {
+                    width: window.innerWidth,
+                    height: window.innerHeight,
+                  },
+                },
                 defaultViewType: "gallery",
               },
               meetingInfo: [
@@ -130,18 +167,10 @@
                 "participant",
                 "invite",
                 "joinTime",
+                "whiteboard",
               ],
               toolbar: {
-                buttons: [
-                  {
-                    text: "Leave",
-                    className: "custom-leave-btn",
-                    onClick: async () => {
-                      await client.leave();
-                      notifyAppAndClose();
-                    },
-                  },
-                ],
+                buttons: [],
               },
               branding: {
                 name: "",
@@ -162,17 +191,41 @@
           console.log("✅ Joined meeting successfully!");
           loading.style.display = "none";
 
-          // Leave Meeting Handler
+          /* Leave Meeting */
           leaveBtn.onclick = async () => {
             await client.leave();
             notifyAppAndClose();
           };
 
-          // Listen for meeting end event
+          /* Meeting End */
           client.on("connection-change", (payload) => {
-            if (payload.state === "Closed") {
-              notifyAppAndClose();
-            }
+            if (payload.state === "Closed") notifyAppAndClose();
+          });
+
+          /* Observe participant tiles to add custom Fullscreen buttons */
+          const observer = new MutationObserver(() => {
+            const tiles = document.querySelectorAll(
+              ".participant-tile:not([data-enhanced])"
+            );
+            tiles.forEach((tile) => {
+              tile.setAttribute("data-enhanced", "true");
+
+              const btn = document.createElement("button");
+              btn.innerText = "Full Screen";
+              btn.className = "fullscreen-btn";
+
+              btn.onclick = () => {
+                const isFull = tile.classList.toggle("fullscreen");
+                btn.innerText = isFull ? "Exit" : "Full Screen";
+              };
+
+              tile.appendChild(btn);
+            });
+          });
+
+          observer.observe(meetingSDKElement, {
+            childList: true,
+            subtree: true,
           });
         } catch (err) {
           console.error("❌ Join error:", err);
@@ -181,7 +234,7 @@
           loading.style.display = "none";
         }
 
-        // Notify your React Native app via postMessage
+        /* Post message to React Native */
         function notifyAppAndClose() {
           if (window.ReactNativeWebView) {
             window.ReactNativeWebView.postMessage(
