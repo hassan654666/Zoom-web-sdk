@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Zoom Mobile Meeting</title>
+    <title>Zoom Meeting</title>
 
     <!-- Zoom SDK dependencies -->
     <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
@@ -12,74 +12,46 @@
     <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
 
     <style>
-      html, body {
-        height: 100%;
+      html,
+      body {
         margin: 0;
+        height: 100%;
         background: #000;
         overflow: hidden;
         font-family: "Inter", sans-serif;
       }
 
-      /* Root meeting container */
       #meetingSDKElement {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
         height: 100vh;
         width: 100vw;
-        background-color: #000;
-        position: relative;
-      }
-
-      /* Participant video area */
-      .participant-view {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-
-      /* Fullscreen remote videos stacked */
-      .remote-video {
-        flex: 1;
         display: flex;
         justify-content: center;
         align-items: center;
-        background: #111;
+        background-color: #000;
       }
 
-      video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 0;
-      }
-
-      /* Picture-in-picture for self-view */
-      .pip-video {
-        position: absolute;
-        bottom: 15px;
-        right: 15px;
-        width: 110px;
-        height: 160px;
-        border-radius: 10px;
-        overflow: hidden;
-        border: 2px solid #fff;
-        background: #222;
-        z-index: 999;
-      }
-
-      /* Error and leave button */
-      #error {
-        color: #ff5252;
+      #errorBox {
+        color: #ff4d4d;
         text-align: center;
         font-size: 14px;
-        margin-top: 15px;
+        padding: 10px;
+        display: none;
+      }
+
+      #loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 16px;
+        font-family: sans-serif;
       }
 
       #leaveBtn {
@@ -102,10 +74,6 @@
       }
 
       @media (max-width: 600px) {
-        .pip-video {
-          width: 90px;
-          height: 130px;
-        }
         #leaveBtn {
           padding: 8px 14px;
           font-size: 13px;
@@ -115,9 +83,11 @@
   </head>
 
   <body>
-    <button id="leaveBtn">Leave</button>
     <div id="meetingSDKElement"></div>
-    <div id="error"></div>
+    <div id="errorBox"></div>
+    <div id="loading">Joining meeting...</div>
+
+    <button id="leaveBtn">Leave</button>
 
     <script>
       window.addEventListener("DOMContentLoaded", async () => {
@@ -128,8 +98,13 @@
         const userName = decodeURIComponent(params.get("name") || "Guest");
         const password = decodeURIComponent(params.get("password") || "").trim();
 
+        const errorBox = document.getElementById("errorBox");
+        const loading = document.getElementById("loading");
+        const leaveBtn = document.getElementById("leaveBtn");
+
         if (!meetingNumber || !signature || !sdkKey) {
-          document.getElementById("error").innerText = "❌ Missing parameters.";
+          errorBox.style.display = "block";
+          errorBox.innerText = "❌ Missing parameters.";
           return;
         }
 
@@ -140,19 +115,38 @@
           await client.init({
             zoomAppRoot: meetingSDKElement,
             language: "en-US",
+            patchJsMedia: true,
             customize: {
               video: {
                 isResizable: false,
-                viewSizes: {
-                  default: {
-                    width: window.innerWidth,
-                    height: window.innerHeight,
-                  },
-                },
-              },
-              layout: {
-                mode: "gallery",
                 popper: { disable: true },
+                defaultViewType: "gallery",
+              },
+              meetingInfo: [
+                "topic",
+                "host",
+                "mn",
+                "pwd",
+                "participant",
+                "invite",
+                "joinTime",
+              ],
+              toolbar: {
+                buttons: [
+                  {
+                    text: "Leave",
+                    className: "custom-leave-btn",
+                    onClick: async () => {
+                      await client.leave();
+                      notifyAppAndClose();
+                    },
+                  },
+                ],
+              },
+              branding: {
+                name: "",
+                logo: "",
+                hideMeetingInfo: true,
               },
             },
           });
@@ -166,17 +160,36 @@
           });
 
           console.log("✅ Joined meeting successfully!");
+          loading.style.display = "none";
 
-          // Leave button to return to app
-          document.getElementById("leaveBtn").addEventListener("click", () => {
-            client.leaveMeeting().then(() => {
-              window.location.href = "https://yourappdomain.com/exit-meeting"; // ⬅️ Replace with your app screen URL
-            });
+          // Leave Meeting Handler
+          leaveBtn.onclick = async () => {
+            await client.leave();
+            notifyAppAndClose();
+          };
+
+          // Listen for meeting end event
+          client.on("connection-change", (payload) => {
+            if (payload.state === "Closed") {
+              notifyAppAndClose();
+            }
           });
         } catch (err) {
           console.error("❌ Join error:", err);
-          document.getElementById("error").innerText =
-            "❌ Failed to join meeting. See console for details.";
+          errorBox.style.display = "block";
+          errorBox.innerText = "❌ Failed to join meeting. See console.";
+          loading.style.display = "none";
+        }
+
+        // Notify your React Native app via postMessage
+        function notifyAppAndClose() {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(
+              JSON.stringify({ action: "exitMeeting" })
+            );
+          } else {
+            alert("Meeting ended. You can now close this window.");
+          }
         }
       });
     </script>
