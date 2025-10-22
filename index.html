@@ -1,486 +1,648 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <title>Zoom Meeting (Embedded)</title>
+    <meta charset="utf-8" />
+    <title>Zoom Meeting - Skill Swap</title>
 
-  <!-- IMPORTANT: adjust version if you want a different SDK version.
-       This page assumes Meeting SDK (component / embedded) is available at this CDN.
-       You can also bundle @zoom/meetingsdk in your build. -->
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
+    <!-- Zoom SDK dependencies -->
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
 
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
-  <style>
-    :root{
-      --accent: #0a84ff;
-      --danger: #ff3b30;
-      --btn-bg: rgba(0,0,0,0.6);
-      --muted: rgba(255,255,255,0.08);
-      --text: #fff;
-      --panel: rgba(0,0,0,0.4);
-    }
-    html,body{ height:100%; width:100%; margin:0; padding:0; background:#000; color:var(--text); font-family:Inter,Arial,Helvetica,sans-serif; -webkit-font-smoothing:antialiased;}
-    /* container where Zoom SDK will render */
-    #meetingSDKElement { position:fixed; inset:0; width:100vw; height:100vh; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; z-index:1; }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
-    /* top-left status / loading / errors */
-    #infoPanel { position:absolute; top:12px; left:12px; z-index:10050; background:var(--panel); padding:8px 10px; border-radius:8px; font-size:13px; display:flex; gap:10px; align-items:center; }
-    #errorBox { color:#ffb3b3; display:none; }
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-    /* overlay toolbar (bottom center) */
-    .overlay-toolbar {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: 18px;
-      z-index:10040;
-      display:flex;
-      gap:8px;
-      align-items:center;
-      backdrop-filter: blur(6px);
-      padding:10px;
-      border-radius:999px;
-      background: linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0.35));
-      box-shadow: 0 6px 30px rgba(0,0,0,0.6);
-      max-width: calc(100% - 32px);
-    }
-    .toolbar-btn {
-      appearance:none;
-      border: none;
-      background: var(--btn-bg);
-      color: var(--text);
-      padding:10px 12px;
-      border-radius:10px;
-      font-size:13px;
-      min-width:44px;
-      display:flex;
-      gap:8px;
-      align-items:center;
-      justify-content:center;
-      cursor:pointer;
-    }
-    .toolbar-btn.primary { background: linear-gradient(0deg, var(--accent), #2f89ff); box-shadow: 0 4px 14px rgba(10,132,255,0.12); }
-    .toolbar-btn.danger { background: var(--danger); color:#fff; }
-    /* small label under a button (optional) */
-    .btn-label { font-size:11px; opacity:0.86; }
+        html, body {
+            height: 100%;
+            width: 100%;
+            background: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
 
-    /* per-tile fullscreen button (we inject into each tile) */
-    .fullscreen-btn {
-      position:absolute;
-      bottom:8px;
-      right:8px;
-      z-index:9999;
-      padding:6px 8px;
-      border-radius:6px;
-      border:none;
-      background:rgba(0,0,0,0.55);
-      color:#fff;
-      font-size:12px;
-      cursor:pointer;
-    }
+        #meetingSDKElement {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 100vh;
+            width: 100vw;
+            background-color: #000;
+            z-index: 1;
+        }
 
-    /* when we force a tile fullscreen */
-    .participant-tile.fullscreen {
-      position:fixed !important;
-      inset:0 !important;
-      width:100vw !important;
-      height:100vh !important;
-      z-index:9990 !important;
-      margin:0 !important;
-      border-radius:0 !important;
-      background:#000;
-    }
+        /* Custom Controls Overlay */
+        #customControls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
 
-    /* small participant strip (bottom) - optional */
-    #participantStrip { position:absolute; left:12px; bottom:82px; right:12px; z-index:10035; display:flex; gap:8px; overflow:auto; padding:4px; }
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
 
-    /* hide native scrollbars for a cleaner look */
-    ::-webkit-scrollbar{ height:8px; width:8px; }
-    ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.06); border-radius:6px; }
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
 
-    /* responsive tweaks */
-    @media (max-width:600px){
-      .overlay-toolbar { bottom: 10px; padding:8px; gap:6px; }
-      .toolbar-btn { padding:8px; min-width:40px; font-size:12px; }
-    }
-  </style>
+        .control-btn.leave {
+            background: #ff3b30;
+        }
+
+        .control-btn.leave:hover {
+            background: #ff5e57;
+        }
+
+        .control-btn.active {
+            background: #2D8CFF;
+        }
+
+        /* Meeting Info Header */
+        #meetingHeader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            color: white;
+            padding: 15px 20px;
+            z-index: 10000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #meetingInfo {
+            font-size: 14px;
+        }
+
+        #meetingTimer {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        /* Loading Screen */
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10001;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #2D8CFF;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Error Screen */
+        #errorScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            z-index: 10002;
+        }
+
+        .error-btn {
+            background: #2D8CFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-top: 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        /* Fullscreen Toggle for Participant Tiles */
+        .participant-tile {
+            position: relative;
+        }
+
+        .fullscreen-toggle {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .participant-tile:hover .fullscreen-toggle {
+            opacity: 1;
+        }
+
+        .participant-tile.fullscreen-active {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 9999 !important;
+            background: #000;
+        }
+
+        .participant-tile.fullscreen-active .fullscreen-toggle {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            #customControls {
+                bottom: 10px;
+                padding: 10px 15px;
+            }
+
+            .control-btn {
+                width: 44px;
+                height: 44px;
+                font-size: 16px;
+            }
+
+            #meetingHeader {
+                padding: 10px 15px;
+            }
+
+            #meetingInfo {
+                font-size: 12px;
+            }
+
+            #meetingTimer {
+                font-size: 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #customControls {
+                gap: 8px;
+                padding: 8px 12px;
+            }
+
+            .control-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 14px;
+            }
+        }
+
+        /* Hide default Zoom controls we're replacing */
+        .zm-client-footer, .zm-client-header {
+            display: none !important;
+        }
+    </style>
 </head>
+
 <body>
-  <div id="meetingSDKElement"></div>
+    <!-- Loading Screen -->
+    <div id="loadingScreen">
+        <div class="spinner"></div>
+        <h2>Joining Skill Swap Meeting...</h2>
+        <p>Please wait while we connect you</p>
+    </div>
 
-  <div id="infoPanel" aria-live="polite">
-    <div id="statusText">Joining...</div>
-    <div id="errorBox"></div>
-  </div>
+    <!-- Error Screen -->
+    <div id="errorScreen">
+        <h2 style="color: #ff6b6b; margin-bottom: 15px;">❌ Connection Failed</h2>
+        <p id="errorMessage">Unable to join the meeting</p>
+        <button class="error-btn" onclick="retryJoin()">Try Again</button>
+        <button class="error-btn" onclick="notifyAppAndClose()" style="background: #6c757d; margin-left: 10px;">Exit</button>
+    </div>
 
-  <!-- an optional participant strip for small previews if you want -->
-  <div id="participantStrip" aria-hidden="true"></div>
+    <!-- Meeting Header -->
+    <div id="meetingHeader">
+        <div id="meetingInfo">
+            <span id="meetingTopic">Skill Swap Meeting</span>
+            • <span id="meetingId">Loading...</span>
+        </div>
+        <div id="meetingTimer">00:00</div>
+    </div>
 
-  <!-- overlay toolbar -->
-  <div class="overlay-toolbar" role="toolbar" aria-label="Meeting controls">
-    <button id="btnToggleMic" class="toolbar-btn" title="Toggle microphone">🎤</button>
-    <button id="btnToggleCam" class="toolbar-btn" title="Toggle camera">🎥</button>
-    <button id="btnToggleShare" class="toolbar-btn" title="Toggle screen share">🖥️</button>
-    <button id="btnWhiteboard" class="toolbar-btn" title="Whiteboard">✏️</button>
-    <button id="btnChat" class="toolbar-btn" title="Chat">💬</button>
-    <button id="btnParticipants" class="toolbar-btn" title="Participants">👥</button>
-    <button id="btnViewMode" class="toolbar-btn" title="Gallery/Speaker">🧭</button>
-    <button id="btnFullscreenGlob" class="toolbar-btn" title="Full screen">⛶</button>
-    <button id="btnLeave" class="toolbar-btn danger" title="Leave meeting">Leave</button>
-  </div>
+    <!-- Zoom SDK Container -->
+    <div id="meetingSDKElement"></div>
 
-  <script>
-    (async function () {
-      const params = new URLSearchParams(location.search);
-      const meetingNumber = params.get('meetingNumber');
-      const signature = decodeURIComponent(params.get('signature') || '');
-      const sdkKey = params.get('sdkKey');
-      const userName = decodeURIComponent(params.get('name') || 'Guest');
-      const password = decodeURIComponent(params.get('password') || '') || '';
+    <!-- Custom Controls -->
+    <div id="customControls">
+        <button class="control-btn" id="micBtn" title="Microphone">🎤</button>
+        <button class="control-btn" id="videoBtn" title="Camera">📹</button>
+        <button class="control-btn" id="shareBtn" title="Share Screen">🖥️</button>
+        <button class="control-btn" id="participantsBtn" title="Participants">👥</button>
+        <button class="control-btn" id="chatBtn" title="Chat">💬</button>
+        <button class="control-btn" id="moreBtn" title="More Options">⋯</button>
+        <button class="control-btn leave" id="leaveBtn" title="Leave Meeting">📞</button>
+    </div>
 
-      // UI refs
-      const statusText = document.getElementById('statusText');
-      const errorBox = document.getElementById('errorBox');
-      const meetingRoot = document.getElementById('meetingSDKElement');
+    <script>
+        // Global variables
+        let client;
+        let meetingStartTime;
+        let timerInterval;
+        let isMicMuted = false;
+        let isVideoOff = false;
 
-      // helpers for React Native WebView comms
-      function postToRN(payload) {
-        const msg = JSON.stringify(payload);
-        if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
-          window.ReactNativeWebView.postMessage(msg);
-        } else {
-          // no RN; keep console and no-op fallback
-          console.log('OUT:', msg);
+        // Configuration from URL parameters
+        const params = new URLSearchParams(window.location.search);
+        const meetingNumber = params.get("meetingNumber");
+        const signature = decodeURIComponent(params.get("signature") || "");
+        const sdkKey = params.get("sdkKey");
+        const userName = decodeURIComponent(params.get("name") || "Guest");
+        const password = decodeURIComponent(params.get("password") || "").trim();
+        const meetingTopic = decodeURIComponent(params.get("topic") || "Skill Swap Meeting");
+
+        // DOM Elements
+        const loadingScreen = document.getElementById('loadingScreen');
+        const errorScreen = document.getElementById('errorScreen');
+        const errorMessage = document.getElementById('errorMessage');
+        const meetingHeader = document.getElementById('meetingHeader');
+        const meetingIdElement = document.getElementById('meetingId');
+        const meetingTopicElement = document.getElementById('meetingTopic');
+        const meetingTimer = document.getElementById('meetingTimer');
+        const customControls = document.getElementById('customControls');
+
+        // Initialize meeting
+        window.addEventListener("DOMContentLoaded", async () => {
+            if (!meetingNumber || !signature || !sdkKey) {
+                showError("Missing required meeting parameters");
+                return;
+            }
+
+            meetingTopicElement.textContent = meetingTopic;
+            meetingIdElement.textContent = `ID: ${meetingNumber}`;
+
+            try {
+                await initializeZoomMeeting();
+            } catch (error) {
+                console.error("Meeting initialization failed:", error);
+                showError("Failed to initialize meeting: " + error.message);
+            }
+        });
+
+        async function initializeZoomMeeting() {
+            try {
+                // Create Zoom client
+                client = window.ZoomMtgEmbedded.createClient();
+                const meetingSDKElement = document.getElementById("meetingSDKElement");
+
+                // Initialize with custom configuration
+                await client.init({
+                    zoomAppRoot: meetingSDKElement,
+                    language: "en-US",
+                    patchJsMedia: true,
+                    customize: {
+                        video: {
+                            viewSizes: {
+                                default: {
+                                    width: '100%',
+                                    height: '100%'
+                                }
+                            },
+                            isResizable: true,
+                            popper: {
+                                placement: 'top'
+                            }
+                        },
+                        meetingInfo: [
+                            "topic",
+                            "host",
+                            "mn",
+                            "pwd",
+                            "participant",
+                            "invite",
+                            "joinTime"
+                        ],
+                        toolbar: {
+                            buttons: [] // Hide default toolbar, we use custom controls
+                        }
+                    }
+                });
+
+                // Join meeting
+                await client.join({
+                    sdkKey: sdkKey,
+                    signature: signature,
+                    meetingNumber: meetingNumber,
+                    password: password,
+                    userName: userName
+                });
+
+                console.log("✅ Successfully joined Zoom meeting");
+                
+                // Hide loading screen
+                loadingScreen.style.display = 'none';
+                
+                // Start meeting timer
+                startMeetingTimer();
+                
+                // Setup event listeners
+                setupEventListeners();
+                
+                // Setup participant tile observer for fullscreen buttons
+                setupParticipantObserver();
+
+            } catch (error) {
+                throw new Error("Join failed: " + error.message);
+            }
         }
-      }
 
-      // Small safety checks
-      if (!meetingNumber || !signature || !sdkKey) {
-        errorBox.style.display = 'block';
-        errorBox.innerText = 'Missing required params: meetingNumber, signature or sdkKey.';
-        statusText.innerText = 'Error';
-        postToRN({ action: 'joinFailed', reason: 'missingParams' });
-        return;
-      }
+        function setupEventListeners() {
+            // Custom control buttons
+            document.getElementById('micBtn').addEventListener('click', toggleMicrophone);
+            document.getElementById('videoBtn').addEventListener('click', toggleVideo);
+            document.getElementById('shareBtn').addEventListener('click', toggleShareScreen);
+            document.getElementById('participantsBtn').addEventListener('click', toggleParticipants);
+            document.getElementById('chatBtn').addEventListener('click', toggleChat);
+            document.getElementById('moreBtn').addEventListener('click', showMoreOptions);
+            document.getElementById('leaveBtn').addEventListener('click', leaveMeeting);
 
-      // Create the embedded SDK client
-      try {
-        const client = window.ZoomMtgEmbedded.createClient();
-        // Keep a reference globally for debugging in RN dev mode if needed
-        window.__zoomClient = client;
-
-        statusText.innerText = 'Initializing...';
-
-        await client.init({
-          zoomAppRoot: meetingRoot,
-          language: 'en-US',
-          // patchJsMedia helps with audio/video on some environments
-          patchJsMedia: true,
-          customize: {
-            // component view / layout settings — component view gives you control
-            video: {
-              defaultViewType: 'gallery',
-              viewSizes: {
-                default: { width: window.innerWidth, height: window.innerHeight }
-              }
-            },
-            // keep toolbar minimally managed by SDK; we create our own overlay
-            toolbar: {
-              buttons: [] // hide default toolbar to use our custom overlay (SDK UI still available)
-            },
-            branding: {
-              name: '',
-              logo: ''
-            }
-          }
-        });
-
-        statusText.innerText = 'Joining meeting...';
-
-        // Join
-        await client.join({
-          sdkKey,
-          signature,
-          meetingNumber,
-          password,
-          userName,
-        });
-
-        statusText.innerText = 'Joined';
-        postToRN({ action: 'joined', meetingNumber });
-
-        // Hook common SDK events to forward to RN app
-        client.on('connection-change', (payload) => {
-          console.log('connection-change', payload);
-          postToRN({ action: 'connection-change', payload });
-          if (payload.state === 'Closed' || payload.state === 'Disconnecting') {
-            // closed -> notify RN to close WebView
-            postToRN({ action: 'meetingEnded', reason: payload.state });
-          }
-        });
-
-        client.on('participant-join', (p) => {
-          postToRN({ action: 'participant-join', payload: p });
-        });
-        client.on('participant-leave', (p) => {
-          postToRN({ action: 'participant-leave', payload: p });
-        });
-
-        // expose a small utility to find SDK-rendered controls (fallback)
-        function tryClickSdkButtonByLabel(labels = []) {
-          // This attempts to find a visible button with a label or aria-label matching
-          const btns = Array.from(document.querySelectorAll('button, [role="button"]'));
-          for (const b of btns) {
-            const txt = (b.innerText || b.getAttribute('aria-label') || '').toLowerCase();
-            for (const lab of labels) if (txt.includes(lab.toLowerCase())) { b.click(); return true; }
-          }
-          return false;
-        }
-
-        /***** TOOLBAR HOOKUPS (our overlay buttons) *****/
-        const btnMic = document.getElementById('btnToggleMic');
-        const btnCam = document.getElementById('btnToggleCam');
-        const btnShare = document.getElementById('btnToggleShare');
-        const btnWhiteboard = document.getElementById('btnWhiteboard');
-        const btnChat = document.getElementById('btnChat');
-        const btnParticipants = document.getElementById('btnParticipants');
-        const btnViewMode = document.getElementById('btnViewMode');
-        const btnFullscreenGlob = document.getElementById('btnFullscreenGlob');
-        const btnLeave = document.getElementById('btnLeave');
-
-        // Microphone toggle: try client API, else click SDK UI fallback
-        btnMic.onclick = async () => {
-          try {
-            // Many SDKs provide a toggle for local audio - try SDK method if available
-            if (client.getAudio && client.getAudio().isMyAudioMuted !== undefined) {
-              // if SDK exposes microphone control API (may vary by version)
-              const muted = client.getAudio().isMyAudioMuted();
-              if (muted) client.getAudio().unmute();
-              else client.getAudio().mute();
-            } else if (client.muteAudio && client.unmuteAudio) {
-              // alternate names
-              const currentlyMuted = (window.__myMuted || false);
-              if (currentlyMuted) await client.unmuteAudio();
-              else await client.muteAudio();
-              window.__myMuted = !currentlyMuted;
-            } else {
-              // fallback: try to click a visible SDK mic button
-              if (!tryClickSdkButtonByLabel(['mute', 'unmute', 'microphone'])) {
-                console.warn('Mic toggle not available via SDK API or fallback.');
-              }
-            }
-          } catch (e) {
-            console.error('Mic toggle error', e);
-          }
-        };
-
-        // Camera toggle: same approach
-        btnCam.onclick = async () => {
-          try {
-            if (client.getVideo && client.getVideo().isMyVideoMuted !== undefined) {
-              const camOff = client.getVideo().isMyVideoMuted();
-              if (camOff) client.getVideo().unmute();
-              else client.getVideo().mute();
-            } else if (client.muteVideo && client.unmuteVideo) {
-              const camOff = (window.__camOff || false);
-              if (camOff) await client.unmuteVideo();
-              else await client.muteVideo();
-              window.__camOff = !camOff;
-            } else {
-              if (!tryClickSdkButtonByLabel(['start video', 'stop video', 'camera'])) {
-                console.warn('Camera toggle not available via SDK API or fallback.');
-              }
-            }
-          } catch (e) { console.error('Cam toggle error', e); }
-        };
-
-        // Screen-share toggle: NOTE - many browsers require user gesture and permission
-        btnShare.onclick = async () => {
-          try {
-            // Attempt SDK-provided screen share methods if available
-            if (client.startShare && client.stopShare) {
-              // naive toggle: check some SDK state if exposed (may not exist)
-              if (window.__isSharing) { await client.stopShare(); window.__isSharing = false; }
-              else { await client.startShare(); window.__isSharing = true; }
-            } else {
-              // Fallback: click a "Share" button rendered by SDK
-              if (!tryClickSdkButtonByLabel(['share screen', 'share'])) {
-                alert('Screen share not available: requires browser support and SDK configuration.');
-              }
-            }
-          } catch (err) {
-            console.error('Start/Stop share error', err);
-            alert('Could not start screen share. See console for details.');
-          }
-        };
-
-        // Whiteboard button: opens whiteboard in meeting if the SDK supports it.
-        btnWhiteboard.onclick = async () => {
-          try {
-            // Whiteboard is typically exposed through the SDK UI; the programmatic API often requires extra scopes.
-            if (client.openWhiteboard) {
-              await client.openWhiteboard();
-            } else {
-              // fallback to clicking a button labeled "Whiteboard" in SDK UI
-              if (!tryClickSdkButtonByLabel(['whiteboard'])) {
-                alert('Whiteboard not available. Check your SDK version and whiteboard API permissions.');
-              }
-            }
-          } catch (err) {
-            console.error('Whiteboard error', err);
-            alert('Whiteboard failed. See console. Whiteboard requires server-side scopes from Zoom.');
-          }
-        };
-
-        // Chat popup
-        btnChat.onclick = async () => {
-          try {
-            if (client.openChat) await client.openChat();
-            else tryClickSdkButtonByLabel(['chat']);
-          } catch (err) { console.error('Chat open error', err); }
-        };
-
-        // Participants UI
-        btnParticipants.onclick = async () => {
-          try {
-            if (client.openParticipant) await client.openParticipant();
-            else tryClickSdkButtonByLabel(['participants', 'manage participants']);
-          } catch (err) { console.error('Participants error', err); }
-        };
-
-        // View mode toggle (gallery/speaker)
-        btnViewMode.onclick = async () => {
-          try {
-            // If SDK provides, toggle the view type
-            if (client.getVideo && client.getVideo().setViewType) {
-              const cur = client.getVideo().getViewType?.() || 'gallery';
-              const next = cur === 'gallery' ? 'active_speaker' : 'gallery';
-              await client.getVideo().setViewType(next);
-              postToRN({ action: 'viewChange', view: next });
-            } else {
-              // fallback: try to click a button labeled "Switch to active speaker" or similar
-              tryClickSdkButtonByLabel(['speaker', 'gallery', 'switch to']);
-            }
-          } catch (err) { console.error('View toggle error', err); }
-        };
-
-        // Global full-screen for the whole meeting area
-        btnFullscreenGlob.onclick = async () => {
-          try {
-            if (document.fullscreenElement) {
-              await document.exitFullscreen();
-            } else {
-              if (meetingRoot.requestFullscreen) await meetingRoot.requestFullscreen();
-              else if (meetingRoot.webkitRequestFullscreen) await meetingRoot.webkitRequestFullscreen();
-              else meetingRoot.style.position = 'fixed'; // fallback CSS mode
-            }
-          } catch (err) { console.error('fullscreen error', err); }
-        };
-
-        // Leave meeting and notify RN. If user is host and wants to end-for-all, your RN app should ask the server to end the meeting via Zoom API.
-        btnLeave.onclick = async () => {
-          try {
-            await client.leave();
-          } catch (e) { console.warn('client.leave() threw', e); }
-          postToRN({ action: 'exitMeeting', source: 'toolbar' });
-          // If running as a normal browser fallback:
-          if (!window.ReactNativeWebView) alert('You left the meeting. Close this window.');
-        };
-
-        /***** Participant tile enhancements: Fullscreen button injection *****/
-        const observer = new MutationObserver((mutations) => {
-          const tiles = meetingRoot.querySelectorAll('.participant-tile:not([data-enhanced])');
-          tiles.forEach(tile => {
-            tile.setAttribute('data-enhanced', 'true');
-
-            // create per-tile fullscreen button
-            const fbtn = document.createElement('button');
-            fbtn.className = 'fullscreen-btn';
-            fbtn.setAttribute('aria-label', 'Fullscreen participant');
-            fbtn.innerText = 'Full';
-            fbtn.onclick = async (ev) => {
-              ev.stopPropagation();
-              // prefer Fullscreen API on the tile element
-              try {
-                if (!document.fullscreenElement) {
-                  if (tile.requestFullscreen) await tile.requestFullscreen();
-                  else tile.classList.toggle('fullscreen');
-                } else {
-                  if (document.exitFullscreen) await document.exitFullscreen();
+            // Zoom client events
+            client.on("connection-change", (payload) => {
+                if (payload.state === "Closed") {
+                    notifyAppAndClose();
                 }
-              } catch (err) {
-                // fallback: toggle CSS fullscreen class (works in many contexts)
-                tile.classList.toggle('fullscreen');
-              }
-            };
-            // keep it visible and accessible
-            tile.style.position = tile.style.position || 'relative';
-            tile.appendChild(fbtn);
-          });
-        });
+            });
 
-        observer.observe(meetingRoot, { childList: true, subtree: true });
+            client.on("user-updated", (payload) => {
+                console.log("User updated:", payload);
+            });
 
-        /***** Keep meeting running / background handling *****/
-        // Note: Many mobile WebViews will suspend timers when backgrounded; this is mostly platform-level.
-        // We'll try to re-attach and re-render when the page becomes visible again.
+            // Handle window resize for responsive design
+            window.addEventListener('resize', handleResize);
+        }
+
+        function setupParticipantObserver() {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1 && node.classList && 
+                            (node.classList.contains('participant-tile') || 
+                             node.querySelector('.participant-tile'))) {
+                            
+                            const tiles = node.classList.contains('participant-tile') 
+                                ? [node] 
+                                : node.querySelectorAll('.participant-tile');
+                            
+                            tiles.forEach(tile => {
+                                if (!tile.hasAttribute('data-fullscreen-enhanced')) {
+                                    tile.setAttribute('data-fullscreen-enhanced', 'true');
+                                    addFullscreenToggle(tile);
+                                }
+                            });
+                        }
+                    });
+                });
+            });
+
+            observer.observe(document.getElementById('meetingSDKElement'), {
+                childList: true,
+                subtree: true
+            });
+        }
+
+        function addFullscreenToggle(tile) {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'fullscreen-toggle';
+            toggleBtn.innerHTML = '⛶';
+            toggleBtn.title = 'Toggle Fullscreen';
+            
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isFullscreen = tile.classList.toggle('fullscreen-active');
+                toggleBtn.innerHTML = isFullscreen ? '⛷' : '⛶';
+                toggleBtn.title = isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen';
+            });
+
+            tile.appendChild(toggleBtn);
+        }
+
+        function startMeetingTimer() {
+            meetingStartTime = new Date();
+            timerInterval = setInterval(() => {
+                const now = new Date();
+                const diff = now - meetingStartTime;
+                const minutes = Math.floor(diff / 60000);
+                const seconds = Math.floor((diff % 60000) / 1000);
+                meetingTimer.textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        // Control Functions
+        async function toggleMicrophone() {
+            try {
+                // This would use Zoom SDK audio control APIs
+                // For now, we'll toggle the UI state
+                isMicMuted = !isMicMuted;
+                const micBtn = document.getElementById('micBtn');
+                micBtn.style.background = isMicMuted ? '#ff6b6b' : 'rgba(255, 255, 255, 0.1)';
+                micBtn.innerHTML = isMicMuted ? '🎤❌' : '🎤';
+                
+                // Send message to React Native
+                sendToReactNative({ action: 'audioToggled', muted: isMicMuted });
+            } catch (error) {
+                console.error("Failed to toggle microphone:", error);
+            }
+        }
+
+        async function toggleVideo() {
+            try {
+                // This would use Zoom SDK video control APIs
+                isVideoOff = !isVideoOff;
+                const videoBtn = document.getElementById('videoBtn');
+                videoBtn.style.background = isVideoOff ? '#ff6b6b' : 'rgba(255, 255, 255, 0.1)';
+                videoBtn.innerHTML = isVideoOff ? '📹❌' : '📹';
+                
+                // Send message to React Native
+                sendToReactNative({ action: 'videoToggled', off: isVideoOff });
+            } catch (error) {
+                console.error("Failed to toggle video:", error);
+            }
+        }
+
+        async function toggleShareScreen() {
+            try {
+                // Zoom SDK screen sharing
+                sendToReactNative({ action: 'shareScreenToggled' });
+            } catch (error) {
+                console.error("Failed to toggle screen share:", error);
+            }
+        }
+
+        async function toggleParticipants() {
+            try {
+                // Show/hide participants list
+                sendToReactNative({ action: 'participantsToggled' });
+            } catch (error) {
+                console.error("Failed to toggle participants:", error);
+            }
+        }
+
+        async function toggleChat() {
+            try {
+                // Show/hide chat panel
+                sendToReactNative({ action: 'chatToggled' });
+            } catch (error) {
+                console.error("Failed to toggle chat:", error);
+            }
+        }
+
+        async function showMoreOptions() {
+            try {
+                // Show additional options
+                sendToReactNative({ action: 'moreOptionsRequested' });
+            } catch (error) {
+                console.error("Failed to show more options:", error);
+            }
+        }
+
+        async function leaveMeeting() {
+            try {
+                if (client) {
+                    await client.leave();
+                }
+                notifyAppAndClose();
+            } catch (error) {
+                console.error("Failed to leave meeting:", error);
+                notifyAppAndClose(); // Force close anyway
+            }
+        }
+
+        // Utility Functions
+        function showError(message) {
+            errorMessage.textContent = message;
+            loadingScreen.style.display = 'none';
+            errorScreen.style.display = 'flex';
+        }
+
+        function retryJoin() {
+            errorScreen.style.display = 'none';
+            loadingScreen.style.display = 'flex';
+            setTimeout(() => {
+                initializeZoomMeeting().catch(error => {
+                    showError("Still unable to connect: " + error.message);
+                });
+            }, 1000);
+        }
+
+        function handleResize() {
+            // Ensure meeting takes full screen on resize
+            const meetingElement = document.getElementById('meetingSDKElement');
+            meetingElement.style.width = window.innerWidth + 'px';
+            meetingElement.style.height = window.innerHeight + 'px';
+        }
+
+        function sendToReactNative(message) {
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify(message));
+            }
+        }
+
+        function notifyAppAndClose() {
+            // Clear timer
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            // Send exit message to React Native
+            sendToReactNative({ 
+                action: 'meetingEnded', 
+                duration: meetingStartTime ? (new Date() - meetingStartTime) : 0,
+                meetingNumber: meetingNumber
+            });
+            
+            // Close after a short delay
+            setTimeout(() => {
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'closeWebView' }));
+                }
+            }, 1000);
+        }
+
+        // Handle page visibility (for background/foreground transitions)
         document.addEventListener('visibilitychange', () => {
-          postToRN({ action: 'visibility', state: document.visibilityState });
-          if (document.visibilityState === 'visible') {
-            // Try a lightweight SDK refresh/re-render if available
-            if (client.reRender) client.reRender();
-          }
+            sendToReactNative({
+                action: 'visibilityChanged',
+                isVisible: !document.hidden
+            });
         });
 
-        // expose ability for RN to send commands to this page
-        window.addEventListener('message', (ev) => {
-          try {
-            const data = (typeof ev.data === 'string') ? JSON.parse(ev.data) : ev.data;
-            if (!data || !data.cmd) return;
-            if (data.cmd === 'leave') btnLeave.click();
-            if (data.cmd === 'toggleMic') btnMic.click();
-            if (data.cmd === 'toggleCam') btnCam.click();
-            if (data.cmd === 'fullscreen') btnFullscreenGlob.click();
-          } catch (e) { console.warn('message handler', e); }
+        // Prevent accidental navigation
+        window.addEventListener('beforeunload', (e) => {
+            e.preventDefault();
+            e.returnValue = 'Are you sure you want to leave the meeting?';
         });
-
-        // Also handle RN postMessage channel (React Native WebView uses this to send messages into the webview)
-        window.document.addEventListener('message', (ev) => {
-          // older RN usages; parse and forward to the same handler for convenience
-          try { const data = JSON.parse(ev.data); if (data && data.cmd) window.postMessage(JSON.stringify(data)); } catch(e){ }
-        });
-
-        /***** Small UI polish: try to expose helpful hints for missing features *****/
-        // Check for share/whiteboard availability and mark toolbar accordingly
-        const checkFeatures = () => {
-          // Whiteboard availability often requires server-side scopes and SDK version support:
-          if (!(client.openWhiteboard || tryClickSdkButtonByLabel(['whiteboard']))) {
-            btnWhiteboard.title = 'Whiteboard (not available in this meeting or SDK permissions)';
-            btnWhiteboard.style.opacity = 0.6;
-          }
-          // screen sharing: if browser does not support, mark it
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            btnShare.title = 'Screen share unsupported by this browser';
-            btnShare.style.opacity = 0.6;
-          }
-        };
-        setTimeout(checkFeatures, 1200);
-
-        // done
-      } catch (err) {
-        console.error('Join/Init error', err);
-        errorBox.style.display = 'block';
-        errorBox.innerText = 'Failed to init/join meeting. Check console for details.';
-        statusText.innerText = 'Error';
-        // notify RN if present
-        if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'joinError', error: String(err) }));
-      }
-    })();
-  </script>
+    </script>
 </body>
 </html>
