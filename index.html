@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html>
-  <head>
+<head>
     <meta charset="utf-8" />
-    <title>Zoom Embedded Meeting</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zoom Meeting</title>
 
+    <!-- Zoom Web SDK -->
     <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
@@ -12,56 +14,250 @@
     <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
 
     <style>
-      html, body { height: 100%; margin: 0; background: #000; }
-      #meetingSDKElement { height: 100vh; width: 100vw; }
-      #error { color: red; text-align: center; font-family: sans-serif; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body { 
+            height: 100%; 
+            width: 100%;
+            overflow: hidden; 
+            background: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        #meetingSDKElement { 
+            height: 100vh; 
+            width: 100vw; 
+        }
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 9999;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #333;
+            border-top: 4px solid #2D8CFF;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #error {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            z-index: 10000;
+        }
+        .retry-button {
+            background: #2D8CFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-top: 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
     </style>
-  </head>
+</head>
 
-  <body>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <h3>Initializing Zoom Meeting...</h3>
+        <p>Please wait while we connect to the meeting</p>
+    </div>
+
+    <div id="error">
+        <h2 style="color: #EF4444; margin-bottom: 15px;">❌ Failed to Join Meeting</h2>
+        <p id="error-message">There was an issue joining the meeting.</p>
+        <button class="retry-button" onclick="retryJoin()">Try Again</button>
+        <button class="retry-button" onclick="openInZoom()" style="background: #10B981; margin-left: 10px;">Open in Zoom App</button>
+    </div>
+
     <div id="meetingSDKElement"></div>
-    <div id="error"></div>
 
     <script>
-      window.addEventListener("DOMContentLoaded", async () => {
-        console.log("ZoomMtgEmbedded:", window.ZoomMtgEmbedded);
+        let client;
+        let joinAttempts = 0;
+        const maxJoinAttempts = 3;
 
-        const params = new URLSearchParams(window.location.search);
-        const meetingNumber = params.get("meetingNumber");
-        const signature = decodeURIComponent(params.get("signature") || "");
-        const sdkKey = params.get("sdkKey");
-        const userName = decodeURIComponent(params.get("name") || "Guest");
-        const password = decodeURIComponent(params.get("password") || "").trim();
+        // Configuration from React Native
+        const meetingNumber = "${safeMeetingId}";
+        const signature = "${safeSignature}";
+        const sdkKey = "${safeSdkKey}";
+        const userName = "${userName.replace(/"/g, '\\"')}";
+        const password = "${safePassword}";
+        const directLink = "${directZoomUrl}";
 
-        if (!meetingNumber || !signature || !sdkKey) {
-          document.getElementById("error").innerText = "❌ Missing parameters.";
-          return;
-        }
-
-        try {
-          const client = window.ZoomMtgEmbedded.createClient();
-          const meetingSDKElement = document.getElementById("meetingSDKElement");
-
-          await client.init({
-            zoomAppRoot: meetingSDKElement,
-            language: "en-US",
-          });
-
-          await client.join({
-            sdkKey,
-            signature,
+        console.log('Zoom SDK Configuration:', {
             meetingNumber,
-            password,
             userName,
-          });
+            sdkKey: sdkKey ? '***' : 'missing',
+            signature: signature ? '***' : 'missing',
+            hasPassword: !!password
+        });
 
-          console.log("✅ Joined meeting successfully!");
-        } catch (err) {
-          console.error("❌ Join error:", err);
-          document.getElementById("error").innerText =
-            "❌ Failed to join meeting. See console.";
+        function showError(message) {
+            console.error('Zoom Error:', message);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'flex';
+            document.getElementById('error-message').textContent = message;
         }
-      });
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function retryJoin() {
+            if (joinAttempts >= maxJoinAttempts) {
+                showError('Maximum retry attempts reached. Please try opening in the Zoom app.');
+                return;
+            }
+            
+            joinAttempts++;
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('loading').style.display = 'flex';
+            
+            console.log('Retry attempt:', joinAttempts);
+            setTimeout(initializeAndJoin, 1000);
+        }
+
+        function openInZoom() {
+            console.log('Opening in Zoom app:', directLink);
+            window.location.href = directLink;
+        }
+
+        async function initializeAndJoin() {
+            try {
+                // Check if required parameters are present
+                if (!meetingNumber) {
+                    showError('Meeting number is missing');
+                    return;
+                }
+
+                if (!sdkKey || !signature) {
+                    showError('SDK authentication is incomplete');
+                    return;
+                }
+
+                // Check if Zoom SDK is loaded
+                if (typeof window.ZoomMtgEmbedded === 'undefined') {
+                    showError('Zoom SDK failed to load. Please check your connection.');
+                    return;
+                }
+
+                console.log('Initializing Zoom client...');
+                
+                // Create client
+                client = window.ZoomMtgEmbedded.createClient();
+                
+                // Initialize
+                await client.init({
+                    zoomAppRoot: document.getElementById('meetingSDKElement'),
+                    language: 'en-US',
+                    patchJsMedia: true,
+                    success: function() {
+                        console.log('Zoom client initialized successfully');
+                    },
+                    error: function(error) {
+                        throw new Error('Initialization failed: ' + JSON.stringify(error));
+                    }
+                });
+
+                console.log('Joining meeting...');
+                
+                // Join meeting
+                await client.join({
+                    sdkKey: sdkKey,
+                    signature: signature,
+                    meetingNumber: meetingNumber,
+                    password: password,
+                    userName: userName,
+                    success: function() {
+                        console.log('✅ Successfully joined Zoom meeting');
+                        hideLoading();
+                        joinAttempts = 0; // Reset counter on success
+                    },
+                    error: function(error) {
+                        throw new Error('Join failed: ' + JSON.stringify(error));
+                    }
+                });
+
+            } catch (error) {
+                console.error('Zoom SDK Error:', error);
+                
+                let errorMessage = 'Failed to join meeting: ';
+                if (error.message.includes('signature')) {
+                    errorMessage += 'Invalid signature. Please check your authentication.';
+                } else if (error.message.includes('meeting')) {
+                    errorMessage += 'Meeting not found or has ended.';
+                } else if (error.message.includes('network')) {
+                    errorMessage += 'Network error. Please check your connection.';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                showError(errorMessage);
+            }
+        }
+
+        // Start the process when SDK is loaded
+        function checkSDKLoaded() {
+            if (typeof window.ZoomMtgEmbedded !== 'undefined') {
+                console.log('Zoom SDK loaded, starting initialization...');
+                setTimeout(initializeAndJoin, 1000);
+            } else {
+                // Wait for SDK to load
+                setTimeout(checkSDKLoaded, 500);
+            }
+        }
+
+        // Start when page loads
+        window.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, checking for Zoom SDK...');
+            setTimeout(checkSDKLoaded, 1000);
+            
+            // Fallback if SDK doesn't load in 10 seconds
+            setTimeout(function() {
+                if (document.getElementById('loading').style.display !== 'none') {
+                    showError('Zoom SDK timeout. Please try another method.');
+                }
+            }, 10000);
+        });
+
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && client) {
+                console.log('Page became visible - checking meeting status');
+            }
+        });
+
     </script>
-  </body>
+</body>
 </html>
