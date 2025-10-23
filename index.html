@@ -43,47 +43,24 @@
             position: relative;
         }
 
-        /* Force Speaker View and proper video layout */
-        .video-container {
-            width: 100% !important;
-            height: 100% !important;
-        }
-
-        /* Main speaker video - full screen */
-        .main-video {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 1 !important;
-        }
-
-        /* Self video - PIP in corner */
-        .self-video {
-            position: absolute !important;
+        /* Minimal styling - let Zoom handle most layout */
+        .self-video-pip {
+            position: fixed !important;
             bottom: 20px !important;
             right: 20px !important;
             width: 120px !important;
             height: 160px !important;
-            z-index: 2 !important;
+            z-index: 1000 !important;
             border: 2px solid #fff !important;
             border-radius: 8px !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+            overflow: hidden !important;
         }
 
-        /* Hide other participant videos in gallery view */
-        .video-container:not(.main-video):not(.self-video) {
-            display: none !important;
-        }
-
-        /* Zoom controls container */
-        .video-operations {
-            position: absolute !important;
-            bottom: 20px !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            z-index: 3 !important;
+        /* Hide the original self video from gallery */
+        .self-video-original {
+            opacity: 0 !important;
+            pointer-events: none !important;
         }
 
         #loading {
@@ -98,7 +75,7 @@
             align-items: center;
             color: white;
             font-size: 18px;
-            z-index: 1000;
+            z-index: 1001;
         }
 
         #error {
@@ -115,7 +92,7 @@
             color: white;
             text-align: center;
             padding: 20px;
-            z-index: 1001;
+            z-index: 1002;
         }
 
         .retry-btn {
@@ -129,19 +106,11 @@
             font-size: 16px;
         }
 
-        /* Landscape orientation support */
+        /* Landscape orientation */
         @media (orientation: landscape) {
-            .self-video {
+            .self-video-pip {
                 width: 160px !important;
                 height: 120px !important;
-            }
-        }
-
-        /* Portrait orientation */
-        @media (orientation: portrait) {
-            .self-video {
-                width: 120px !important;
-                height: 160px !important;
             }
         }
     </style>
@@ -172,13 +141,15 @@
 
         let zoomClient = null;
         let observer = null;
+        let selfVideoPIP = null;
+        let isInitialized = false;
 
         // Start meeting when page loads
         window.addEventListener('DOMContentLoaded', startMeeting);
 
         // Handle screen orientation changes
-        window.addEventListener('orientationchange', setupVideoLayout);
-        window.addEventListener('resize', setupVideoLayout);
+        window.addEventListener('orientationchange', updatePIPSize);
+        window.addEventListener('resize', updatePIPSize);
 
         async function startMeeting() {
             try {
@@ -197,22 +168,12 @@
                 // Create Zoom client
                 zoomClient = window.ZoomMtgEmbedded.createClient();
 
-                // Initialize Zoom with speaker view preference
+                // Initialize Zoom - let Zoom handle the layout
                 await zoomClient.init({
                     zoomAppRoot: document.getElementById('meetingSDKElement'),
                     language: 'en-US',
-                    patchJsMedia: true,
-                    customize: {
-                        video: {
-                            viewSizes: {
-                                default: {
-                                    width: '100%',
-                                    height: '100%'
-                                }
-                            },
-                            defaultViewType: 'speaker' // Force speaker view
-                        }
-                    }
+                    patchJsMedia: true
+                    // No customizations - let Zoom handle layout
                 });
 
                 // Set up meeting end listener
@@ -222,10 +183,8 @@
                     }
                 });
 
-                // Listen for participant changes to setup video layout
-                zoomClient.on('user-added', setupVideoLayout);
-                zoomClient.on('user-removed', setupVideoLayout);
-                zoomClient.on('user-updated', setupVideoLayout);
+                // Listen for video state changes
+                zoomClient.on('user-updated', handleUserUpdate);
 
                 // Join meeting
                 await zoomClient.join({
@@ -241,8 +200,10 @@
                 // Hide loading screen
                 document.getElementById('loading').style.display = 'none';
 
-                // Start observing DOM for video elements
-                startVideoObservation();
+                // Start observing for self video
+                setTimeout(startVideoObservation, 2000);
+
+                isInitialized = true;
 
             } catch (error) {
                 console.error('Meeting error:', error);
@@ -250,110 +211,125 @@
             }
         }
 
+        function handleUserUpdate(payload) {
+            // When user video state changes, update PIP
+            if (payload && payload.user) {
+                setTimeout(createSelfVideoPIP, 500);
+            }
+        }
+
         function startVideoObservation() {
-            // Observe DOM changes to apply our custom video styling
+            // Use a more gentle observer with debouncing
             observer = new MutationObserver(() => {
-                setupVideoLayout();
+                // Debounce to prevent flickering
+                clearTimeout(window.videoUpdateTimeout);
+                window.videoUpdateTimeout = setTimeout(createSelfVideoPIP, 300);
             });
 
             observer.observe(document.getElementById('meetingSDKElement'), {
                 childList: true,
                 subtree: true,
-                attributes: true,
-                attributeFilter: ['class']
+                attributes: false, // Don't observe attributes to reduce flickering
+                childList: true
             });
 
             // Initial setup
-            setTimeout(setupVideoLayout, 1000);
+            createSelfVideoPIP();
         }
 
-        function setupVideoLayout() {
+        function createSelfVideoPIP() {
+            if (!isInitialized) return;
+
             try {
                 const meetingElement = document.getElementById('meetingSDKElement');
                 if (!meetingElement) return;
 
-                // Find all video containers
-                const videoContainers = meetingElement.querySelectorAll('[class*="video-container"], .video-container');
-                
-                let mainVideo = null;
-                let selfVideo = null;
+                // Find all video elements
+                const videoElements = meetingElement.querySelectorAll('video');
+                let selfVideoElement = null;
 
-                videoContainers.forEach(container => {
-                    // Reset all containers first
-                    container.classList.remove('main-video', 'self-video');
-                    
-                    // Try to identify self video (usually has specific classes or attributes)
-                    const videoElement = container.querySelector('video');
-                    if (videoElement) {
-                        const isSelfVideo = container.classList.contains('self-video') || 
-                                           container.getAttribute('data-self') === 'true' ||
-                                           container.innerText.includes(userName) ||
-                                           (videoElement.srcObject && videoElement.srcObject.active);
-                        
-                        if (isSelfVideo) {
-                            selfVideo = container;
-                        } else {
-                            mainVideo = container;
+                // Try to identify self video
+                videoElements.forEach(video => {
+                    // Look for videos that are playing (self video usually starts playing first)
+                    if (video.readyState > 0 && !video.paused && !video.muted) {
+                        // Additional check: look for video that matches our user context
+                        const container = video.closest('[class*="video-container"]');
+                        if (container) {
+                            const containerText = container.innerText || '';
+                            if (containerText.includes(userName) || 
+                                container.getAttribute('data-self') === 'true' ||
+                                !selfVideoElement) {
+                                selfVideoElement = video;
+                            }
                         }
                     }
                 });
 
-                // If we couldn't identify by classes, use heuristics
-                if (!selfVideo || !mainVideo) {
-                    videoContainers.forEach((container, index) => {
-                        if (index === 0 && !selfVideo) {
-                            selfVideo = container;
-                        } else if (!mainVideo) {
-                            mainVideo = container;
-                        }
-                    });
+                // Fallback: use first video if no self video found
+                if (!selfVideoElement && videoElements.length > 0) {
+                    selfVideoElement = videoElements[0];
                 }
 
-                // Apply styling
-                if (mainVideo) {
-                    mainVideo.classList.add('main-video');
-                    // Ensure main video takes full screen
-                    mainVideo.style.width = '100%';
-                    mainVideo.style.height = '100%';
-                    mainVideo.style.position = 'absolute';
-                    mainVideo.style.top = '0';
-                    mainVideo.style.left = '0';
+                if (selfVideoElement && !selfVideoPIP) {
+                    createPIPElement(selfVideoElement);
+                } else if (selfVideoElement && selfVideoPIP) {
+                    // Update existing PIP with new video stream if needed
+                    updatePIPVideo(selfVideoElement);
                 }
-
-                if (selfVideo) {
-                    selfVideo.classList.add('self-video');
-                    // Style as PIP
-                    selfVideo.style.width = getSelfVideoWidth();
-                    selfVideo.style.height = getSelfVideoHeight();
-                    selfVideo.style.position = 'absolute';
-                    selfVideo.style.bottom = '20px';
-                    selfVideo.style.right = '20px';
-                    selfVideo.style.zIndex = '100';
-                    selfVideo.style.border = '2px solid #fff';
-                    selfVideo.style.borderRadius = '8px';
-                    selfVideo.style.overflow = 'hidden';
-                }
-
-                // Hide other videos (show only main + self)
-                videoContainers.forEach(container => {
-                    if (container !== mainVideo && container !== selfVideo) {
-                        container.style.display = 'none';
-                    } else {
-                        container.style.display = 'block';
-                    }
-                });
 
             } catch (error) {
-                console.log('Video layout setup error:', error);
+                console.log('PIP creation error:', error);
             }
         }
 
-        function getSelfVideoWidth() {
-            return window.innerHeight > window.innerWidth ? '120px' : '160px';
+        function createPIPElement(originalVideo) {
+            // Create a new video element for PIP
+            selfVideoPIP = document.createElement('video');
+            selfVideoPIP.className = 'self-video-pip';
+            selfVideoPIP.autoplay = true;
+            selfVideoPIP.muted = true;
+            selfVideoPIP.playsInline = true;
+
+            // Copy the video stream
+            if (originalVideo.srcObject) {
+                selfVideoPIP.srcObject = originalVideo.srcObject;
+            } else if (originalVideo.src) {
+                selfVideoPIP.src = originalVideo.src;
+            }
+
+            // Add to body
+            document.body.appendChild(selfVideoPIP);
+
+            // Mark original video as hidden (but don't remove it - Zoom needs it)
+            const originalContainer = originalVideo.closest('[class*="video-container"]');
+            if (originalContainer) {
+                originalContainer.classList.add('self-video-original');
+            }
+
+            console.log('✅ Created self video PIP');
         }
 
-        function getSelfVideoHeight() {
-            return window.innerHeight > window.innerWidth ? '160px' : '120px';
+        function updatePIPVideo(originalVideo) {
+            if (!selfVideoPIP) return;
+
+            // Update PIP with current video stream
+            if (originalVideo.srcObject && selfVideoPIP.srcObject !== originalVideo.srcObject) {
+                selfVideoPIP.srcObject = originalVideo.srcObject;
+            }
+        }
+
+        function updatePIPSize() {
+            if (!selfVideoPIP) return;
+
+            if (window.innerHeight > window.innerWidth) {
+                // Portrait
+                selfVideoPIP.style.width = '120px';
+                selfVideoPIP.style.height = '160px';
+            } else {
+                // Landscape
+                selfVideoPIP.style.width = '160px';
+                selfVideoPIP.style.height = '120px';
+            }
         }
 
         function showError(message) {
@@ -366,18 +342,26 @@
             document.getElementById('error').style.display = 'none';
             document.getElementById('loading').style.display = 'flex';
             
-            // Clean up observer
+            // Clean up
             if (observer) {
                 observer.disconnect();
             }
+            if (selfVideoPIP) {
+                selfVideoPIP.remove();
+                selfVideoPIP = null;
+            }
             
+            isInitialized = false;
             setTimeout(startMeeting, 1000);
         }
 
         function notifyAppAndClose() {
-            // Clean up observer
+            // Clean up
             if (observer) {
                 observer.disconnect();
+            }
+            if (selfVideoPIP) {
+                selfVideoPIP.remove();
             }
 
             // Notify React Native app that meeting ended
