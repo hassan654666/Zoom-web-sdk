@@ -176,20 +176,37 @@
       client = window.ZoomMtgEmbedded.createClient();
       const meetingRoot = document.getElementById('meetingSDKElement');
 
-      await client.init({
-        zoomAppRoot: meetingRoot,
-        language: 'en-US',
-        patchJsMedia: true,
-        customize: {
-          video: {
-            // let SDK layout freely (we will style)
-            defaultViewType: 'activeSpeaker',
-          },
-          toolbar: {
-            // keep default buttons (so Zoom UI controls show)
-          },
-        }
-      });
+      <!-- await client.init({ -->
+        <!-- zoomAppRoot: meetingRoot, -->
+        <!-- language: 'en-US', -->
+        <!-- patchJsMedia: true, -->
+        <!-- customize: { -->
+          <!-- video: { -->
+            <!-- // let SDK layout freely (we will style) -->
+            <!-- defaultViewType: 'activeSpeaker', -->
+          <!-- }, -->
+          <!-- toolbar: { -->
+            <!-- // keep default buttons (so Zoom UI controls show) -->
+          <!-- }, -->
+        <!-- } -->
+      <!-- }); -->
+	  
+	  await client.init({
+            zoomAppRoot: meetingSDKElement,
+            language: "en-US",
+            customize: {
+              video: { defaultViewType: 'activeSpeaker', isResizable: true },
+              meetingInfo: [
+                "topic",
+                "host",
+                "mn",
+                "participant",
+                "invite",
+                "joinTime",
+                "whiteboard",
+              ],
+            },
+          });
 
       setStatus('Joining meeting...');
       await client.join({
