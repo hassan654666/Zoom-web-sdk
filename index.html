@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Zoom Meeting</title>
 
     <!-- Zoom SDK -->
@@ -28,12 +28,62 @@
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
-        #meetingSDKElement {
+        #meetingContainer {
             width: 100vw;
             height: 100vh;
             position: fixed;
             top: 0;
             left: 0;
+            background: #000;
+        }
+
+        #meetingSDKElement {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        /* Force Speaker View and proper video layout */
+        .video-container {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Main speaker video - full screen */
+        .main-video {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 1 !important;
+        }
+
+        /* Self video - PIP in corner */
+        .self-video {
+            position: absolute !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            width: 120px !important;
+            height: 160px !important;
+            z-index: 2 !important;
+            border: 2px solid #fff !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+        }
+
+        /* Hide other participant videos in gallery view */
+        .video-container:not(.main-video):not(.self-video) {
+            display: none !important;
+        }
+
+        /* Zoom controls container */
+        .video-operations {
+            position: absolute !important;
+            bottom: 20px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 3 !important;
         }
 
         #loading {
@@ -78,10 +128,28 @@
             cursor: pointer;
             font-size: 16px;
         }
+
+        /* Landscape orientation support */
+        @media (orientation: landscape) {
+            .self-video {
+                width: 160px !important;
+                height: 120px !important;
+            }
+        }
+
+        /* Portrait orientation */
+        @media (orientation: portrait) {
+            .self-video {
+                width: 120px !important;
+                height: 160px !important;
+            }
+        }
     </style>
 </head>
 <body>
-    <div id="meetingSDKElement"></div>
+    <div id="meetingContainer">
+        <div id="meetingSDKElement"></div>
+    </div>
     
     <div id="loading">
         Joining meeting...
@@ -103,9 +171,14 @@
         const password = decodeURIComponent(params.get("password") || "").trim();
 
         let zoomClient = null;
+        let observer = null;
 
         // Start meeting when page loads
         window.addEventListener('DOMContentLoaded', startMeeting);
+
+        // Handle screen orientation changes
+        window.addEventListener('orientationchange', setupVideoLayout);
+        window.addEventListener('resize', setupVideoLayout);
 
         async function startMeeting() {
             try {
@@ -124,11 +197,22 @@
                 // Create Zoom client
                 zoomClient = window.ZoomMtgEmbedded.createClient();
 
-                // Initialize Zoom
+                // Initialize Zoom with speaker view preference
                 await zoomClient.init({
                     zoomAppRoot: document.getElementById('meetingSDKElement'),
                     language: 'en-US',
-                    patchJsMedia: true
+                    patchJsMedia: true,
+                    customize: {
+                        video: {
+                            viewSizes: {
+                                default: {
+                                    width: '100%',
+                                    height: '100%'
+                                }
+                            },
+                            defaultViewType: 'speaker' // Force speaker view
+                        }
+                    }
                 });
 
                 // Set up meeting end listener
@@ -137,6 +221,11 @@
                         notifyAppAndClose();
                     }
                 });
+
+                // Listen for participant changes to setup video layout
+                zoomClient.on('user-added', setupVideoLayout);
+                zoomClient.on('user-removed', setupVideoLayout);
+                zoomClient.on('user-updated', setupVideoLayout);
 
                 // Join meeting
                 await zoomClient.join({
@@ -152,10 +241,119 @@
                 // Hide loading screen
                 document.getElementById('loading').style.display = 'none';
 
+                // Start observing DOM for video elements
+                startVideoObservation();
+
             } catch (error) {
                 console.error('Meeting error:', error);
                 showError(error.message);
             }
+        }
+
+        function startVideoObservation() {
+            // Observe DOM changes to apply our custom video styling
+            observer = new MutationObserver(() => {
+                setupVideoLayout();
+            });
+
+            observer.observe(document.getElementById('meetingSDKElement'), {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class']
+            });
+
+            // Initial setup
+            setTimeout(setupVideoLayout, 1000);
+        }
+
+        function setupVideoLayout() {
+            try {
+                const meetingElement = document.getElementById('meetingSDKElement');
+                if (!meetingElement) return;
+
+                // Find all video containers
+                const videoContainers = meetingElement.querySelectorAll('[class*="video-container"], .video-container');
+                
+                let mainVideo = null;
+                let selfVideo = null;
+
+                videoContainers.forEach(container => {
+                    // Reset all containers first
+                    container.classList.remove('main-video', 'self-video');
+                    
+                    // Try to identify self video (usually has specific classes or attributes)
+                    const videoElement = container.querySelector('video');
+                    if (videoElement) {
+                        const isSelfVideo = container.classList.contains('self-video') || 
+                                           container.getAttribute('data-self') === 'true' ||
+                                           container.innerText.includes(userName) ||
+                                           (videoElement.srcObject && videoElement.srcObject.active);
+                        
+                        if (isSelfVideo) {
+                            selfVideo = container;
+                        } else {
+                            mainVideo = container;
+                        }
+                    }
+                });
+
+                // If we couldn't identify by classes, use heuristics
+                if (!selfVideo || !mainVideo) {
+                    videoContainers.forEach((container, index) => {
+                        if (index === 0 && !selfVideo) {
+                            selfVideo = container;
+                        } else if (!mainVideo) {
+                            mainVideo = container;
+                        }
+                    });
+                }
+
+                // Apply styling
+                if (mainVideo) {
+                    mainVideo.classList.add('main-video');
+                    // Ensure main video takes full screen
+                    mainVideo.style.width = '100%';
+                    mainVideo.style.height = '100%';
+                    mainVideo.style.position = 'absolute';
+                    mainVideo.style.top = '0';
+                    mainVideo.style.left = '0';
+                }
+
+                if (selfVideo) {
+                    selfVideo.classList.add('self-video');
+                    // Style as PIP
+                    selfVideo.style.width = getSelfVideoWidth();
+                    selfVideo.style.height = getSelfVideoHeight();
+                    selfVideo.style.position = 'absolute';
+                    selfVideo.style.bottom = '20px';
+                    selfVideo.style.right = '20px';
+                    selfVideo.style.zIndex = '100';
+                    selfVideo.style.border = '2px solid #fff';
+                    selfVideo.style.borderRadius = '8px';
+                    selfVideo.style.overflow = 'hidden';
+                }
+
+                // Hide other videos (show only main + self)
+                videoContainers.forEach(container => {
+                    if (container !== mainVideo && container !== selfVideo) {
+                        container.style.display = 'none';
+                    } else {
+                        container.style.display = 'block';
+                    }
+                });
+
+            } catch (error) {
+                console.log('Video layout setup error:', error);
+            }
+        }
+
+        function getSelfVideoWidth() {
+            return window.innerHeight > window.innerWidth ? '120px' : '160px';
+        }
+
+        function getSelfVideoHeight() {
+            return window.innerHeight > window.innerWidth ? '160px' : '120px';
         }
 
         function showError(message) {
@@ -167,10 +365,21 @@
         function retryJoin() {
             document.getElementById('error').style.display = 'none';
             document.getElementById('loading').style.display = 'flex';
+            
+            // Clean up observer
+            if (observer) {
+                observer.disconnect();
+            }
+            
             setTimeout(startMeeting, 1000);
         }
 
         function notifyAppAndClose() {
+            // Clean up observer
+            if (observer) {
+                observer.disconnect();
+            }
+
             // Notify React Native app that meeting ended
             if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(
