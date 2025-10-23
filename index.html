@@ -1,136 +1,489 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Zoom Meeting</title>
+<head>
+  <meta charset="utf-8" />
+  <title>Zoom Meeting - Active Speaker + PIP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
 
-    <!-- Zoom Web SDK -->
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
+  <!-- Zoom Embedded Web SDK -->
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
 
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+  <style>
+    :root {
+      --pip-size-w: 180px;
+      --pip-size-h: 120px;
+      --pip-margin: 14px;
+    }
+    html,body {
+      height:100%;
+      width:100%;
+      margin:0;
+      padding:0;
+      background:#000;
+      overflow:hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-    <style>
-      html,
-      body {
-        height: 100%;
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        background-color: #000;
-        overflow: hidden;
+    /* Meeting root fills viewport and responds to rotation */
+    #meetingSDKElement {
+      position:fixed;
+      inset:0;
+      width:100vw;
+      height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#000;
+    }
+
+    /* Force the zoom container to scale to available area */
+    .zm-root, .zoom-container, #zm-root {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+    }
+
+    /* Main active-speaker view wrapper */
+    .active-speaker-wrap {
+      position: absolute;
+      inset: 0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#000;
+      z-index: 2;
+    }
+    .active-speaker-tile {
+      width:100%;
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      background:#000;
+    }
+    .active-speaker-tile video {
+      width:100%;
+      height:100%;
+      object-fit: cover;
+    }
+
+    /* PIP - local user */
+    .local-pip {
+      position: absolute;
+      bottom: var(--pip-margin);
+      right: var(--pip-margin);
+      width: var(--pip-size-w);
+      height: var(--pip-size-h);
+      min-width: 120px;
+      min-height: 80px;
+      background: rgba(0,0,0,0.35);
+      border-radius: 8px;
+      overflow:hidden;
+      z-index: 5;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      transition: transform 150ms ease;
+    }
+    .local-pip video {
+      width:100%;
+      height:100%;
+      object-fit: cover;
+      transform-origin: center center;
+    }
+
+    /* when the pip is tapped we slightly scale for feedback */
+    .local-pip:active { transform: scale(0.98); }
+
+    /* Keep Zoom's toolbar on top */
+    .zm-toolbar,
+    .zm-toolbar-container,
+    .footer-toolbar,
+    .in-meeting-controls {
+      z-index: 10 !important;
+    }
+
+    /* small screens: reduce pip size */
+    @media (max-width:420px) {
+      :root {
+        --pip-size-w: 140px;
+        --pip-size-h: 100px;
+        --pip-margin: 10px;
       }
+    }
 
-      #meetingSDKElement {
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        width: 100vw;
-      }
+    /* orientation handling (optional tweaks) */
+    @media (orientation: landscape) {
+      .local-pip { right: var(--pip-margin); bottom: var(--pip-margin); }
+    }
+  </style>
+</head>
+<body>
+  <div id="meetingSDKElement" aria-live="polite"></div>
 
-      #errorBox {
-        color: #ff4d4d;
-        text-align: center;
-        margin-top: 20px;
-        font-family: sans-serif;
-      }
+  <!-- lightweight status UI for errors/loading -->
+  <div id="statusOverlay" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); color:#fff; z-index:20; font-family:sans-serif;"></div>
 
-      #loading {
-        color: white;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-family: sans-serif;
-        font-size: 16px;
-      }
-    </style>
-  </head>
+  <script>
+  (async function () {
+    // read params you specified
+    const params = new URLSearchParams(window.location.search);
+    const meetingNumber = params.get("meetingNumber");
+    const signature = decodeURIComponent(params.get("signature") || "");
+    const sdkKey = params.get("sdkKey");
+    const userName = decodeURIComponent(params.get("name") || "Guest");
+    const password = decodeURIComponent(params.get("password") || "").trim();
 
-  <body>
-    <div id="meetingSDKElement"></div>
-    <div id="loading">Joining meeting...</div>
-    <div id="errorBox"></div>
+    const statusOverlay = document.getElementById('statusOverlay');
+    function setStatus(txt, isError=false) {
+      statusOverlay.textContent = txt || '';
+      statusOverlay.style.color = isError ? '#ff6b6b' : '#fff';
+      if (!txt) statusOverlay.style.display='none'; else statusOverlay.style.display='block';
+    }
 
-    <script>
-      window.addEventListener("DOMContentLoaded", async () => {
-        const params = new URLSearchParams(window.location.search);
-        const meetingNumber = params.get("meetingNumber");
-        const signature = decodeURIComponent(params.get("signature") || "");
-        const sdkKey = params.get("sdkKey");
-        const userName = decodeURIComponent(params.get("name") || "Guest");
-        const password = decodeURIComponent(params.get("password") || "").trim();
+    if (!meetingNumber || !signature || !sdkKey) {
+      setStatus('Missing meeting parameters (sdkKey / signature / meetingNumber)', true);
+      postToApp({ event: 'error', message: 'missing_parameters' });
+      return;
+    }
 
-        const loading = document.getElementById("loading");
-        const errorBox = document.getElementById("errorBox");
-
-        if (!meetingNumber || !signature || !sdkKey) {
-          errorBox.innerText = "❌ Missing required parameters.";
-          loading.style.display = "none";
-          return;
+    // helper to send messages to RN
+    function postToApp(payload) {
+      try {
+        const json = JSON.stringify(payload);
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(json);
+        } else {
+          console.log('postToApp:', json);
         }
+      } catch(e) { console.warn('postToApp error', e); }
+    }
 
-        try {
-          const client = window.ZoomMtgEmbedded.createClient();
-          const meetingSDKElement = document.getElementById("meetingSDKElement");
+    // create zoom client
+    let client = null;
+    try {
+      setStatus('Initializing SDK...');
+      client = window.ZoomMtgEmbedded.createClient();
+      const meetingRoot = document.getElementById('meetingSDKElement');
 
-          await client.init({
-            zoomAppRoot: meetingSDKElement,
-            language: "en-US",
-            customize: {
-              video: { isResizable: true },
-              meetingInfo: [
-                "topic",
-                "host",
-                "mn",
-                "participant",
-                "invite",
-                "joinTime",
-                "whiteboard",
-              ],
-            },
-          });
-
-          await client.join({
-            sdkKey,
-            signature,
-            meetingNumber,
-            password,
-            userName,
-          });
-
-          loading.style.display = "none";
-          console.log("✅ Joined meeting successfully");
-
-          // Detect when meeting ends
-          client.on("connection-change", (payload) => {
-            if (payload.state === "Closed") {
-              notifyApp("meetingEnded");
-            }
-          });
-        } catch (err) {
-          console.error("❌ Error joining meeting:", err);
-          errorBox.innerText = "❌ Failed to join meeting. Check console.";
-          loading.style.display = "none";
-        }
-
-        // Notify React Native app
-        function notifyApp(action) {
-          if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ action }));
-          } else {
-            alert("Meeting ended — you can close this tab.");
-          }
+      await client.init({
+        zoomAppRoot: meetingRoot,
+        language: 'en-US',
+        patchJsMedia: true,
+        customize: {
+          video: {
+            // let SDK layout freely (we will style)
+            defaultViewType: 'activeSpeaker',
+          },
+          toolbar: {
+            // keep default buttons (so Zoom UI controls show)
+          },
         }
       });
-    </script>
-  </body>
+
+      setStatus('Joining meeting...');
+      await client.join({
+        sdkKey,
+        signature,
+        meetingNumber,
+        password,
+        userName
+      });
+
+      setStatus('');
+      postToApp({ event: 'joined' });
+
+      // when connection changes to CLOSED -> meeting ended
+      try {
+        client.on('connection-change', (payload) => {
+          console.log('connection-change', payload);
+          if (payload && payload.state === 'Closed') {
+            postToApp({ event: 'meetingEnded' });
+          }
+        });
+      } catch(e) { console.warn('no connection-change'); }
+
+      // Create wrappers for active speaker and pip UI
+      const root = document.getElementById('meetingSDKElement');
+
+      // active-speaker wrapper (will host the active speaker's video DOM)
+      const activeWrap = document.createElement('div');
+      activeWrap.className = 'active-speaker-wrap';
+      const activeTile = document.createElement('div');
+      activeTile.className = 'active-speaker-tile';
+      activeWrap.appendChild(activeTile);
+      root.appendChild(activeWrap);
+
+      // local pip container
+      const pip = document.createElement('div');
+      pip.className = 'local-pip';
+      pip.setAttribute('role','button');
+      pip.setAttribute('aria-label','Local video PIP');
+      root.appendChild(pip);
+
+      // helper: find candidate tiles inserted by Zoom SDK
+      function findAllTiles() {
+        // common class names: 'participant-tile', 'zm-item', 'video-container'
+        const selectors = [
+          '.participant-tile',
+          '.zm-item',
+          '.video-container',
+          '[data-participant-id]',
+          'video'
+        ];
+        const nodes = new Set();
+        selectors.forEach(s => {
+          document.querySelectorAll(s).forEach(n => nodes.add(n));
+        });
+        return Array.from(nodes);
+      }
+
+      // best-effort: decide which tile is local (our) vs remote
+      function isLocalTile(el) {
+        // Zoom SDK often includes a data-role or data-is-me attribute
+        if (!el) return false;
+        if (el.getAttribute && (el.getAttribute('data-is-local') === 'true' || el.getAttribute('data-is-me') === 'true')) return true;
+        // fallback: if tile contains our display name text, or has a muted microphone overlay 'You' (varies)
+        // We cannot be 100% certain for every SDK, so use heuristics: local video tracks often have muted/preview overlays
+        return !!el.querySelector('video') && el.querySelectorAll('video').length && el.querySelectorAll('video')[0].srcObject === null;
+      }
+
+      // helper: find video element inside a tile
+      function findVideoInTile(tile) {
+        if (!tile) return null;
+        const vid = tile.querySelector('video');
+        if (vid) return vid;
+        // sometimes video is higher up
+        return tile.tagName === 'VIDEO' ? tile : null;
+      }
+
+      // build a list of tiles and identify local vs remote
+      function buildTileList() {
+        const tiles = [];
+        const cand = findAllTiles();
+        cand.forEach(node => {
+          const v = findVideoInTile(node);
+          if (v) {
+            tiles.push({ container: node, video: v, isLocal: false });
+          }
+        });
+        // try to find local by heuristic: look for small preview/pip-like tile created by SDK with muted video or "You"
+        // more robust identification might require SDK events (not all versions expose them here).
+        // If SDK exposes participant list events you can map IDs.
+        return tiles;
+      }
+
+      // observe DOM changes and update layout when tiles change
+      const mutationObserver = new MutationObserver((mutations) => {
+        // each time DOM updates, run layout logic
+        requestAnimationFrame(layoutTiles);
+      });
+      mutationObserver.observe(root, { childList: true, subtree: true, attributes: false });
+
+      // helper: pick active speaker tile:
+      function pickActiveSpeakerTile() {
+        // Attempt 1: look for elements with 'active-speaker' or 'active' class
+        const candidates = root.querySelectorAll('.active-speaker, .active, .speaker-active, .zm-active-speaker');
+        for (const c of candidates) {
+          const v = findVideoInTile(c);
+          if (v && !isLocalVideoElement(v)) return v;
+        }
+
+        // Attempt 2: pick any video element that is currently playing and not muted (heuristic)
+        const videos = root.querySelectorAll('video');
+        for (const v of videos) {
+          if (!v.paused && !isLocalVideoElement(v) && v.videoWidth > 10 && v.videoHeight > 10) return v;
+        }
+
+        // Attempt 3: return a remote video (first one that's not our local)
+        for (const v of videos) {
+          if (!isLocalVideoElement(v)) return v;
+        }
+
+        // fallback: return any video
+        return videos[0] || null;
+      }
+
+      // helper: check if <video> is our local camera (best-effort)
+      function isLocalVideoElement(videoElem) {
+        if (!videoElem) return false;
+        // heuristic: local preview videos sometimes have 'local' or 'self' in ancestor attributes
+        const anc = videoElem.closest('[data-is-local], [data-is-me], .local, .preview');
+        if (anc) return true;
+        // if the srcObject tracks length is 0 or it's a captured stream? we cannot fully trust this cross-browser in embedded SDK
+        // Another heuristic: often local preview is smaller in size; skip that check due to inconsistencies.
+        return false;
+      }
+
+      // place a given <video> into the activeTile container (clones or moves)
+      function placeActiveVideo(videoEl) {
+        if (!videoEl) return;
+        // Ensure activeTile contains the chosen video element
+        // Some SDK implementations don't like moving the <video> node; we try to clone the stream into a new video element
+        try {
+          // If videoEl already inside activeTile, done
+          if (activeTile.contains(videoEl)) return;
+
+          // create a mirror video that uses the same srcObject (if available)
+          const mirror = document.createElement('video');
+          mirror.autoplay = true;
+          mirror.playsInline = true;
+          mirror.muted = false;
+          mirror.controls = false;
+          mirror.style.width = '100%';
+          mirror.style.height = '100%';
+          mirror.style.objectFit = 'cover';
+
+          // attempt to reuse srcObject if present (best)
+          try {
+            if (videoEl.srcObject) {
+              mirror.srcObject = videoEl.srcObject;
+            } else if (videoEl.currentSrc) {
+              mirror.src = videoEl.currentSrc;
+            } else if (videoEl.src) {
+              mirror.src = videoEl.src;
+            }
+          } catch(e) { console.warn('mirror srcObject error', e); }
+
+          // remove previous children & append
+          activeTile.innerHTML = '';
+          activeTile.appendChild(mirror);
+        } catch (err) {
+          console.warn('placeActiveVideo failed', err);
+        }
+      }
+
+      // place local video into pip
+      function placeLocalVideo(videoEl) {
+        if (!videoEl) {
+          pip.style.display = 'none';
+          return;
+        }
+        try {
+          pip.style.display = 'flex';
+          // create a mirror for local - muted to avoid echo
+          const localMirror = document.createElement('video');
+          localMirror.autoplay = true;
+          localMirror.playsInline = true;
+          localMirror.muted = true;
+          localMirror.controls = false;
+          localMirror.style.width = '100%';
+          localMirror.style.height = '100%';
+          localMirror.style.objectFit = 'cover';
+          try {
+            if (videoEl.srcObject) localMirror.srcObject = videoEl.srcObject;
+            else if (videoEl.currentSrc) localMirror.src = videoEl.currentSrc;
+            else if (videoEl.src) localMirror.src = videoEl.src;
+          } catch(e) { console.warn('local mirror srcObject error', e); }
+          pip.innerHTML = '';
+          pip.appendChild(localMirror);
+        } catch (err) {
+          console.warn('placeLocalVideo failed', err);
+        }
+      }
+
+      // single layout pass: determine active speaker / local and render
+      function layoutTiles() {
+        try {
+          const allVideos = Array.from(root.querySelectorAll('video'));
+          if (!allVideos.length) return;
+
+          // identify local video element (best-effort)
+          let localVideo = null;
+          // heuristic 1: look for muted video elements (our local preview is often muted)
+          for (const v of allVideos) {
+            if (v.muted) { localVideo = v; break; }
+          }
+          // heuristic 2: look for smaller dimension video
+          if (!localVideo) {
+            let smallest = null;
+            for (const v of allVideos) {
+              if (!smallest || (v.videoWidth && v.videoHeight && (v.videoWidth*v.videoHeight < smallest.area))) {
+                smallest = { v, area: (v.videoWidth||1)*(v.videoHeight||1) };
+              }
+            }
+            if (smallest && smallest.v) localVideo = smallest.v;
+          }
+
+          // pick active remote speaker video
+          const active = pickActiveSpeakerTile();
+
+          // prefer non-local active
+          const activeToUse = active && (!localVideo || active !== localVideo) ? active : (allVideos.find(v => v !== localVideo) || allVideos[0]);
+
+          // update DOM: place active video into main view, local into pip
+          placeActiveVideo(activeToUse);
+          placeLocalVideo(localVideo);
+
+        } catch (e) {
+          console.warn('layoutTiles error', e);
+        }
+      }
+
+      // initial layout and periodic updates (some SDK update patterns require polling a bit)
+      layoutTiles();
+      const layoutInterval = setInterval(layoutTiles, 1200);
+
+      // Also react to resize/orientation change
+      window.addEventListener('resize', () => setTimeout(layoutTiles, 200));
+      window.addEventListener('orientationchange', () => setTimeout(layoutTiles, 300));
+
+      // allow user to tap PIP to swap local <-> main
+      pip.addEventListener('click', () => {
+        try {
+          const mainVideo = activeTile.querySelector('video');
+          const localVideo = pip.querySelector('video');
+          if (!mainVideo || !localVideo) return;
+          // swap srcObject (best-effort)
+          try {
+            const tmp = mainVideo.srcObject || mainVideo.src;
+            if (localVideo.srcObject) mainVideo.srcObject = localVideo.srcObject;
+            if (tmp) localVideo.srcObject = tmp;
+          } catch(e) {
+            // fallback: swap nodes visually
+            const mainHtml = activeTile.innerHTML;
+            activeTile.innerHTML = pip.innerHTML;
+            pip.innerHTML = mainHtml;
+          }
+        } catch(e){ console.warn('pip swap error', e); }
+      });
+
+      // When the SDK's leave button is pressed, the SDK should fire connection-change Closed; we also add a catch-all listener
+      // Try to catch any 'leave meeting' UI actions: listen to clicks on elements that look like leave buttons
+      document.addEventListener('click', (ev) => {
+        try {
+          const t = ev.target;
+          if (!t) return;
+          // many SDKs place "Leave" text on a button; match text content
+          const text = (t.innerText||'').toLowerCase();
+          if (text.includes('leave') || text.includes('end meeting')) {
+            // give it a moment to propagate to SDK then notify app
+            setTimeout(() => postToApp({ event: 'leave_clicked' }), 400);
+          }
+        } catch(e){}
+      });
+
+      // cleanup on unload
+      window.addEventListener('beforeunload', () => {
+        try { clearInterval(layoutInterval); mutationObserver.disconnect(); } catch(e){}
+      });
+
+    } catch (err) {
+      console.error('Zoom join failed', err);
+      setStatus('Failed to join meeting (see console)', true);
+      postToApp({ event: 'error', message: err && err.message ? err.message : 'join_failed' });
+    }
+  })();
+  </script>
+</body>
 </html>
