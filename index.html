@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Zoom Meeting</title>
 
-    <!-- Zoom SDK -->
+    <!-- Zoom Embedded SDK -->
     <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
@@ -14,11 +14,7 @@
     <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
 
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         html, body {
             width: 100vw;
@@ -48,7 +44,7 @@
             left: 0;
         }
 
-        /* Force full screen for all Zoom containers */
+        /* Force full screen for top-level Zoom containers */
         #meetingSDKElement > div {
             width: 100vw !important;
             height: 100vh !important;
@@ -57,19 +53,21 @@
             left: 0 !important;
         }
 
-        /* Ensure Zoom controls are visible and properly positioned */
-        [class*="video-operations"],
-        [class*="toolbar"],
-        [class*="control-bar"] {
+        /* ensure zoom UI controls are visible and centered */
+        [class*="footer"], [class*="toolbar"], [class*="control-bar"], [class*="video-operations"] {
             position: fixed !important;
-            bottom: 10px !important;
+            bottom: 8px !important;
             left: 50% !important;
             transform: translateX(-50%) !important;
-            z-index: 999 !important;
+            z-index: 10000 !important;
             width: auto !important;
             max-width: 95vw !important;
             display: flex !important;
             justify-content: center !important;
+            background: rgba(0,0,0,0.15) !important;
+            padding: 6px 10px !important;
+            border-radius: 10px !important;
+            pointer-events: auto !important;
         }
 
         /* Make sure video containers fill available space */
@@ -78,19 +76,20 @@
             height: 100% !important;
         }
 
-        /* PIP for self video */
+        /* PIP for self video (local preview) */
         .self-video-pip {
             position: fixed !important;
             bottom: 20px !important;
             right: 20px !important;
             width: 120px !important;
             height: 160px !important;
-            z-index: 1000 !important;
+            z-index: 11000 !important;
             border: 2px solid #fff !important;
             border-radius: 8px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
             overflow: hidden !important;
             background: #000 !important;
+            pointer-events: auto !important;
         }
 
         .self-video-pip video {
@@ -99,9 +98,15 @@
             object-fit: cover !important;
         }
 
-        /* Hide the original self video from gallery */
+        /* Keep original local video in DOM but visually hidden so SDK still sends the track */
         .self-video-original {
-            display: none !important;
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            opacity: 0 !important;
+            left: -9999px !important;
+            top: -9999px !important;
+            pointer-events: none !important;
         }
 
         #loading {
@@ -116,7 +121,7 @@
             align-items: center;
             color: white;
             font-size: 18px;
-            z-index: 1001;
+            z-index: 12000;
         }
 
         #error {
@@ -133,7 +138,7 @@
             color: white;
             text-align: center;
             padding: 20px;
-            z-index: 1002;
+            z-index: 12001;
         }
 
         .retry-btn {
@@ -149,36 +154,55 @@
 
         /* Responsive PIP sizing */
         @media (orientation: landscape) {
-            .self-video-pip {
-                width: 160px !important;
-                height: 120px !important;
-            }
+            .self-video-pip { width: 160px !important; height: 120px !important; }
         }
-
         @media (max-width: 768px) and (orientation: portrait) {
-            .self-video-pip {
-                width: 100px !important;
-                height: 133px !important;
-            }
+            .self-video-pip { width: 100px !important; height: 133px !important; }
         }
 
-        /* Ensure all Zoom UI elements are properly sized */
-        .meeting-client,
-        .meeting-client-inner,
-        .meeting-client-content {
+        /* Fullscreen tile styles toggled by JS */
+        .tile-fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 10999 !important;
+            background: #000 !important;
+        }
+
+        /* The fullscreen button on each tile */
+        .tile-fullscreen-btn {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            z-index: 12000;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 14px;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+
+        /* ensure content wrappers take full viewport */
+        .meeting-client, .meeting-client-inner, .meeting-client-content {
             width: 100vw !important;
             height: 100vh !important;
         }
+
+        /* small helper to keep injected buttons visible in dark/light themes */
+        .tile-fullscreen-btn:focus { outline: 2px solid rgba(45,140,255,0.7); }
     </style>
 </head>
 <body>
     <div id="meetingContainer">
         <div id="meetingSDKElement"></div>
     </div>
-    
-    <div id="loading">
-        Joining meeting...
-    </div>
+
+    <div id="loading">Joining meeting...</div>
 
     <div id="error">
         <h2>Unable to Join Meeting</h2>
@@ -187,7 +211,7 @@
     </div>
 
     <script>
-        // Get parameters from URL
+        // URL params
         const params = new URLSearchParams(window.location.search);
         const meetingNumber = params.get("meetingNumber");
         const signature = decodeURIComponent(params.get("signature") || "");
@@ -197,101 +221,298 @@
 
         let zoomClient = null;
         let observer = null;
+        let layoutObserver = null;
         let selfVideoPIP = null;
         let isInitialized = false;
         let layoutInterval = null;
-        let hasJoined = false; // Track if we've successfully joined
+        let hasJoined = false;
 
-        // Start meeting when page loads
-        window.addEventListener('DOMContentLoaded', startMeeting);
-
-        // Handle screen orientation changes and resize
-        window.addEventListener('orientationchange', handleLayout);
-        window.addEventListener('resize', handleLayout);
-
-        function handleLayout() {
-            // Force full screen layout
-            enforceFullScreen();
-            updatePIPSize();
+        // Debounce helpers
+        function debounce(fn, wait = 100) {
+            let t;
+            return (...args) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn.apply(this, args), wait);
+            };
         }
 
-        function enforceFullScreen() {
-            // Force full screen dimensions
-            document.documentElement.style.width = '100vw';
-            document.documentElement.style.height = '100vh';
-            document.body.style.width = '100vw';
-            document.body.style.height = '100vh';
-            
+        // Force full-screen sizing - called often
+        function maintainFullScreen() {
+            // set root sizes
+            document.documentElement.style.width = window.innerWidth + 'px';
+            document.documentElement.style.height = window.innerHeight + 'px';
+            document.body.style.width = window.innerWidth + 'px';
+            document.body.style.height = window.innerHeight + 'px';
+
             const meetingContainer = document.getElementById('meetingContainer');
             const meetingElement = document.getElementById('meetingSDKElement');
-            
+
             if (meetingContainer) {
-                meetingContainer.style.width = '100vw';
-                meetingContainer.style.height = '100vh';
+                meetingContainer.style.width = window.innerWidth + 'px';
+                meetingContainer.style.height = window.innerHeight + 'px';
             }
-            
             if (meetingElement) {
-                meetingElement.style.width = '100vw';
-                meetingElement.style.height = '100vh';
+                meetingElement.style.width = window.innerWidth + 'px';
+                meetingElement.style.height = window.innerHeight + 'px';
             }
 
-            // Force Zoom containers to full screen
-            const zoomContainers = document.querySelectorAll('#meetingSDKElement > div');
-            zoomContainers.forEach(container => {
-                container.style.width = '100vw';
-                container.style.height = '100vh';
-                container.style.position = 'fixed';
-                container.style.top = '0';
-                container.style.left = '0';
+            // Force Zoom top-level children to full-screen
+            const zoomChildren = document.querySelectorAll('#meetingSDKElement > div');
+            zoomChildren.forEach(div => {
+                div.style.width = window.innerWidth + 'px';
+                div.style.height = window.innerHeight + 'px';
+                div.style.position = 'fixed';
+                div.style.top = '0';
+                div.style.left = '0';
             });
+
+            // Also ensure internal wrappers are full
+            const wrappers = document.querySelectorAll('.meeting-client, .meeting-client-inner, .meeting-client-content');
+            wrappers.forEach(w => {
+                w.style.width = window.innerWidth + 'px';
+                w.style.height = window.innerHeight + 'px';
+            });
+        }
+        const debouncedMaintainFullScreen = debounce(maintainFullScreen, 80);
+
+        // Enforce layout repeatedly and on DOM changes
+        function startLayoutEnforcement() {
+            if (layoutInterval) clearInterval(layoutInterval);
+            layoutInterval = setInterval(maintainFullScreen, 1000); // periodic enforcement
+
+            // Observe DOM changes and reapply layout quickly (debounced)
+            if (layoutObserver) layoutObserver.disconnect();
+            layoutObserver = new MutationObserver(debouncedMaintainFullScreen);
+            layoutObserver.observe(document.body, { childList: true, subtree: true });
+        }
+
+        // Try to identify local video <video> element
+        function findLocalVideo(meetingEl) {
+            if (!meetingEl) return null;
+            const videoEls = meetingEl.querySelectorAll('video');
+            if (!videoEls || videoEls.length === 0) return null;
+
+            // Heuristics: find video whose container innerText includes userName OR container has data-self attribute
+            let candidate = null;
+            videoEls.forEach(v => {
+                try {
+                    const cont = v.closest('[class*="video-container"], [class*="video-item"], [class*="videoBox"]');
+                    const text = cont ? (cont.innerText || '') : '';
+                    const isSelfAttr = cont && (cont.getAttribute && cont.getAttribute('data-self') === 'true');
+                    // prefer exact name match
+                    if (text && userName && text.includes(userName)) {
+                        candidate = v;
+                    } else if (isSelfAttr && !candidate) {
+                        candidate = v;
+                    } else if (!candidate && v.readyState > 0 && !v.paused) {
+                        candidate = v;
+                    } else if (!candidate) {
+                        candidate = v;
+                    }
+                } catch(e) {
+                    /* ignore DOM read errors */
+                }
+            });
+            return candidate;
+        }
+
+        // Create PIP but keep original video in DOM (moved offscreen so SDK still transmits)
+        function createOrUpdateSelfPIP() {
+            if (!isInitialized || !hasJoined) return;
+            const meetingEl = document.getElementById('meetingSDKElement');
+            if (!meetingEl) return;
+
+            const localVid = findLocalVideo(meetingEl);
+            if (!localVid) return;
+
+            // ensure original is kept but visually hidden (so track remains active & other participants see you)
+            try {
+                const originalContainer = localVid.closest('[class*="video-container"], [class*="video-item"], [class*="videoBox"]');
+                if (originalContainer) {
+                    originalContainer.classList.add('self-video-original');
+                } else {
+                    localVid.classList.add('self-video-original');
+                }
+            } catch(e) { /* ignore */ }
+
+            // create PIP if not exists
+            if (!selfVideoPIP) {
+                selfVideoPIP = document.createElement('div');
+                selfVideoPIP.className = 'self-video-pip';
+                const pipVideo = document.createElement('video');
+                pipVideo.autoplay = true;
+                pipVideo.muted = true; // local PIP muted
+                pipVideo.playsInline = true;
+
+                // attach srcObject if present; otherwise clone via captureStream fallback
+                if (localVid.srcObject) {
+                    pipVideo.srcObject = localVid.srcObject;
+                } else if (localVid.captureStream) {
+                    try {
+                        pipVideo.srcObject = localVid.captureStream();
+                    } catch (err) { /* ignore */ }
+                } else {
+                    // fallback: set src if video src is available
+                    if (localVid.currentSrc) pipVideo.src = localVid.currentSrc;
+                }
+
+                selfVideoPIP.appendChild(pipVideo);
+                document.body.appendChild(selfVideoPIP);
+                updatePIPSize();
+                console.log('✅ Created/attached self PIP');
+            } else {
+                // update srcObject if it changed
+                const pipVideo = selfVideoPIP.querySelector('video');
+                if (pipVideo && localVid.srcObject && pipVideo.srcObject !== localVid.srcObject) {
+                    pipVideo.srcObject = localVid.srcObject;
+                }
+            }
+        }
+
+        function updatePIPSize() {
+            if (!selfVideoPIP) return;
+            if (window.innerHeight > window.innerWidth) {
+                // portrait
+                selfVideoPIP.style.width = '120px';
+                selfVideoPIP.style.height = '160px';
+            } else {
+                // landscape
+                selfVideoPIP.style.width = '160px';
+                selfVideoPIP.style.height = '120px';
+            }
+        }
+
+        // Add fullscreen toggle to each participant tile
+        function addFullscreenButtonsToTiles() {
+            const meetingEl = document.getElementById('meetingSDKElement');
+            if (!meetingEl) return;
+
+            // Candidate tile selectors (try several common Zoom classes). We'll add to anything that looks like a tile.
+            const tileSelectors = [
+                '[class*="video-container"]',
+                '[class*="video-item"]',
+                '[class*="videoBox"]',
+                '[class*="videoTile"]',
+                '[class*="gallery-view"]'
+            ];
+
+            const tiles = meetingEl.querySelectorAll(tileSelectors.join(','));
+            tiles.forEach(tile => {
+                try {
+                    // Avoid adding duplicate buttons
+                    if (tile.querySelector('.tile-fullscreen-btn')) return;
+
+                    // Create button
+                    const btn = document.createElement('button');
+                    btn.className = 'tile-fullscreen-btn';
+                    btn.setAttribute('aria-label', 'Toggle full screen tile');
+                    btn.innerText = '⤢';
+
+                    // State stored on tile dataset
+                    btn.onclick = (ev) => {
+                        ev.stopPropagation();
+                        // If already fullscreen, remove the class
+                        if (tile.classList.contains('tile-fullscreen')) {
+                            tile.classList.remove('tile-fullscreen');
+                            // restore sibling tiles
+                            document.querySelectorAll('[class*="video-container"], [class*="video-item"], [class*="videoBox"]').forEach(s => {
+                                if (!s.classList.contains('tile-fullscreen')) s.style.display = '';
+                            });
+                            // re-enable toolbar pointer events (some zoom UIs may be covered)
+                            restoreToolbarVisibility();
+                        } else {
+                            // enter fullscreen for this tile
+                            // hide other tiles visually but keep them in DOM
+                            document.querySelectorAll('[class*="video-container"], [class*="video-item"], [class*="videoBox"]').forEach(s => {
+                                if (s !== tile) s.style.display = 'none';
+                            });
+                            tile.classList.add('tile-fullscreen');
+                            // ensure toolbar is visible above tile
+                            ensureToolbarVisible();
+                        }
+                    };
+
+                    // Append button (positioned with CSS)
+                    // try to ensure tile is position:relative or has positioning, so absolute button will show
+                    if (getComputedStyle(tile).position === 'static') {
+                        tile.style.position = 'relative';
+                    }
+                    tile.appendChild(btn);
+                } catch (err) {
+                    /* ignore tile injection errors */
+                }
+            });
+        }
+
+        function ensureToolbarVisible() {
+            const toolbar = document.querySelector('[class*="footer"], [class*="toolbar"], [class*="control-bar"], [class*="video-operations"]');
+            if (toolbar) {
+                toolbar.style.zIndex = 12001;
+            }
+        }
+
+        function restoreToolbarVisibility() {
+            const toolbar = document.querySelector('[class*="footer"], [class*="toolbar"], [class*="control-bar"], [class*="video-operations"]');
+            if (toolbar) {
+                toolbar.style.zIndex = 10000;
+            }
+        }
+
+        // Observes for new tiles (DOM changes) and re-injects buttons
+        function observeAndInjectTileButtons() {
+            const meetingEl = document.getElementById('meetingSDKElement');
+            if (!meetingEl) return;
+
+            // quick initial injection
+            addFullscreenButtonsToTiles();
+
+            // Observe for new nodes
+            const tileObserver = new MutationObserver(debounce(() => {
+                addFullscreenButtonsToTiles();
+                createOrUpdateSelfPIP();
+            }, 300));
+            tileObserver.observe(meetingEl, { childList: true, subtree: true });
         }
 
         async function startMeeting() {
             try {
-                // Prevent multiple join attempts
                 if (hasJoined) {
-                    console.log('Meeting already joined, skipping duplicate join');
+                    console.log('Already joined - skipping duplicate join');
                     return;
                 }
 
-                // Validate required parameters
                 if (!meetingNumber || !signature || !sdkKey) {
                     throw new Error('Missing meeting parameters');
                 }
 
-                console.log('Starting Zoom meeting...');
-
-                // Check if Zoom SDK is loaded
                 if (typeof window.ZoomMtgEmbedded === 'undefined') {
                     throw new Error('Zoom SDK not loaded');
                 }
 
-                // Initial full screen setup
-                enforceFullScreen();
+                console.log('Starting Zoom meeting...');
 
-                // Create Zoom client
+                // initial layout
+                maintainFullScreen();
+
                 zoomClient = window.ZoomMtgEmbedded.createClient();
 
-                // Initialize Zoom - let Zoom handle the layout
                 await zoomClient.init({
                     zoomAppRoot: document.getElementById('meetingSDKElement'),
                     language: 'en-US',
                     patchJsMedia: true
                 });
 
-                // Set up meeting end listener
                 zoomClient.on('connection-change', (payload) => {
                     console.log('Connection change:', payload.state);
                     if (payload.state === 'Closed') {
-                        hasJoined = false; // Reset join flag
+                        hasJoined = false;
                         notifyAppAndClose();
                     } else if (payload.state === 'Connected') {
-                        hasJoined = true; // Mark as joined
+                        hasJoined = true;
                     }
                 });
 
-                // Remove the user-updated listener that was causing issues
-                // Join meeting - only once!
+                // join
                 console.log('Attempting to join meeting...');
                 await zoomClient.join({
                     sdkKey: sdkKey,
@@ -303,211 +524,106 @@
 
                 console.log('✅ Successfully joined meeting');
                 hasJoined = true;
-                
-                // Hide loading screen
                 document.getElementById('loading').style.display = 'none';
 
-                // Start continuous layout enforcement
+                // Start enforcement and observers
                 startLayoutEnforcement();
+                observeAndInjectTileButtons();
 
-                // Start observing for self video
-                setTimeout(startVideoObservation, 3000); // Increased delay to ensure meeting is stable
+                // start video observation after a small delay (Zoom needs time)
+                setTimeout(() => {
+                    createOrUpdateSelfPIP();
+                }, 2200);
+
+                // keep PIP updated periodically (best-effort)
+                setInterval(() => {
+                    createOrUpdateSelfPIP();
+                    addFullscreenButtonsToTiles();
+                }, 2000);
 
                 isInitialized = true;
-
             } catch (error) {
-                console.error('Meeting error:', error);
-                // Don't automatically retry on join errors
+                console.error('Meeting start error:', error);
                 showError(getErrorMessage(error));
             }
         }
 
         function getErrorMessage(error) {
-            if (error.type === 'INVALID_OPERATION' && error.reason === 'Duplicated join operation') {
-                return 'Meeting join already in progress. Please wait.';
-            } else if (error.type === 'JOIN_MEETING_FAILED') {
-                return 'Failed to join meeting. Please check your meeting credentials and try again.';
-            } else {
-                return error.message || 'Unable to join meeting. Please try again.';
-            }
-        }
-
-        function startLayoutEnforcement() {
-            // Continuous layout enforcement for Zoom containers
-            layoutInterval = setInterval(enforceFullScreen, 1000); // Reduced frequency
-            
-            // Also enforce on any DOM changes
-            const layoutObserver = new MutationObserver(() => {
-                // Debounce layout enforcement
-                clearTimeout(window.layoutTimeout);
-                window.layoutTimeout = setTimeout(enforceFullScreen, 100);
-            });
-            layoutObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-        }
-
-        function startVideoObservation() {
-            if (!isInitialized || !hasJoined) return;
-
-            // Use a more gentle observer with debouncing
-            observer = new MutationObserver(() => {
-                clearTimeout(window.videoUpdateTimeout);
-                window.videoUpdateTimeout = setTimeout(createSelfVideoPIP, 500); // Increased delay
-            });
-
-            observer.observe(document.getElementById('meetingSDKElement'), {
-                childList: true,
-                subtree: true,
-                attributes: false
-            });
-
-            // Initial setup with delay
-            setTimeout(createSelfVideoPIP, 1000);
-        }
-
-        function createSelfVideoPIP() {
-            if (!isInitialized || !hasJoined) return;
-
             try {
-                const meetingElement = document.getElementById('meetingSDKElement');
-                if (!meetingElement) return;
-
-                // Find all video elements
-                const videoElements = meetingElement.querySelectorAll('video');
-                let selfVideoElement = null;
-
-                // Try to identify self video
-                videoElements.forEach(video => {
-                    if (video.readyState > 0 && !video.paused) {
-                        const container = video.closest('[class*="video-container"]');
-                        if (container) {
-                            const containerText = container.innerText || '';
-                            if (containerText.includes(userName) || 
-                                container.getAttribute('data-self') === 'true' ||
-                                !selfVideoElement) {
-                                selfVideoElement = video;
-                            }
-                        }
+                if (error && typeof error === 'object') {
+                    if (error.type === 'INVALID_OPERATION' && error.reason === 'Duplicated join operation') {
+                        return 'Meeting join already in progress.';
+                    } else if (error.type === 'JOIN_MEETING_FAILED') {
+                        return 'Failed to join meeting. Please check the meeting credentials.';
+                    } else if (error.message) {
+                        return error.message;
                     }
-                });
-
-                // Fallback: use first video if no self video found
-                if (!selfVideoElement && videoElements.length > 0) {
-                    selfVideoElement = videoElements[0];
                 }
-
-                if (selfVideoElement && !selfVideoPIP) {
-                    createPIPElement(selfVideoElement);
-                } else if (selfVideoElement && selfVideoPIP) {
-                    updatePIPVideo(selfVideoElement);
-                }
-
-            } catch (error) {
-                console.log('PIP creation error:', error);
-            }
-        }
-
-        function createPIPElement(originalVideo) {
-            // Create a container for PIP
-            selfVideoPIP = document.createElement('div');
-            selfVideoPIP.className = 'self-video-pip';
-            
-            const pipVideo = document.createElement('video');
-            pipVideo.autoplay = true;
-            pipVideo.muted = true;
-            pipVideo.playsInline = true;
-
-            if (originalVideo.srcObject) {
-                pipVideo.srcObject = originalVideo.srcObject;
-            }
-            
-            selfVideoPIP.appendChild(pipVideo);
-            document.body.appendChild(selfVideoPIP);
-
-            // Mark original video as hidden
-            const originalContainer = originalVideo.closest('[class*="video-container"]');
-            if (originalContainer) {
-                originalContainer.classList.add('self-video-original');
-            }
-
-            updatePIPSize();
-            console.log('✅ Created self video PIP');
-        }
-
-        function updatePIPVideo(originalVideo) {
-            if (!selfVideoPIP) return;
-            
-            const pipVideo = selfVideoPIP.querySelector('video');
-            if (pipVideo && originalVideo.srcObject && pipVideo.srcObject !== originalVideo.srcObject) {
-                pipVideo.srcObject = originalVideo.srcObject;
-            }
-        }
-
-        function updatePIPSize() {
-            if (!selfVideoPIP) return;
-
-            if (window.innerHeight > window.innerWidth) {
-                // Portrait
-                selfVideoPIP.style.width = '120px';
-                selfVideoPIP.style.height = '160px';
-            } else {
-                // Landscape
-                selfVideoPIP.style.width = '160px';
-                selfVideoPIP.style.height = '120px';
+                return String(error || 'Unable to join meeting.');
+            } catch (e) {
+                return 'Unable to join meeting.';
             }
         }
 
         function showError(message) {
             document.getElementById('loading').style.display = 'none';
-            document.getElementById('error').style.display = 'flex';
+            const err = document.getElementById('error');
+            err.style.display = 'flex';
             document.getElementById('errorMessage').textContent = message;
         }
 
         function retryJoin() {
-            document.getElementById('error').style.display = 'none';
+            const err = document.getElementById('error');
+            err.style.display = 'none';
             document.getElementById('loading').style.display = 'flex';
-            
-            // Clean up
+
+            // cleanup
             if (observer) observer.disconnect();
+            if (layoutObserver) layoutObserver.disconnect();
             if (layoutInterval) clearInterval(layoutInterval);
             if (selfVideoPIP) {
-                selfVideoPIP.remove();
+                try { selfVideoPIP.remove(); } catch(e) {}
                 selfVideoPIP = null;
             }
-            
+
             isInitialized = false;
-            hasJoined = false; // Reset join flag
-            setTimeout(startMeeting, 2000); // Increased delay before retry
+            hasJoined = false;
+            setTimeout(startMeeting, 800);
         }
 
         function notifyAppAndClose() {
-            // Clean up
-            if (observer) observer.disconnect();
-            if (layoutInterval) clearInterval(layoutInterval);
-            if (selfVideoPIP) selfVideoPIP.remove();
+            // cleanup
+            try { if (observer) observer.disconnect(); } catch(e) {}
+            try { if (layoutObserver) layoutObserver.disconnect(); } catch(e) {}
+            try { if (layoutInterval) clearInterval(layoutInterval); } catch(e) {}
+            try { if (selfVideoPIP) selfVideoPIP.remove(); } catch(e) {}
 
-            // Reset flags
             isInitialized = false;
             hasJoined = false;
 
-            // Notify React Native app that meeting ended
             if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'meetingEnded' }));
+            } else {
+                setTimeout(() => alert('Meeting ended. You can close this window.'), 500);
             }
-            
-            // Fallback for browser testing
-            setTimeout(() => {
-                alert('Meeting ended. You can close this window.');
-            }, 500);
         }
 
-        // Global error handling
-        window.addEventListener('error', (event) => {
-            console.error('Global error:', event.error);
+        // window events
+        window.addEventListener('DOMContentLoaded', startMeeting);
+        window.addEventListener('resize', debouncedMaintainFullScreen);
+        window.addEventListener('orientationchange', () => {
+            // give Zoom some time to re-render then enforce layout
+            setTimeout(() => {
+                maintainFullScreen();
+                updatePIPSize();
+                addFullscreenButtonsToTiles();
+            }, 600);
         });
 
+        // global error logging
+        window.addEventListener('error', (ev) => {
+            console.error('Global error:', ev.error || ev);
+        });
     </script>
 </body>
 </html>
