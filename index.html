@@ -200,6 +200,7 @@
         let selfVideoPIP = null;
         let isInitialized = false;
         let layoutInterval = null;
+        let hasJoined = false; // Track if we've successfully joined
 
         // Start meeting when page loads
         window.addEventListener('DOMContentLoaded', startMeeting);
@@ -247,6 +248,12 @@
 
         async function startMeeting() {
             try {
+                // Prevent multiple join attempts
+                if (hasJoined) {
+                    console.log('Meeting already joined, skipping duplicate join');
+                    return;
+                }
+
                 // Validate required parameters
                 if (!meetingNumber || !signature || !sdkKey) {
                     throw new Error('Missing meeting parameters');
@@ -274,15 +281,18 @@
 
                 // Set up meeting end listener
                 zoomClient.on('connection-change', (payload) => {
+                    console.log('Connection change:', payload.state);
                     if (payload.state === 'Closed') {
+                        hasJoined = false; // Reset join flag
                         notifyAppAndClose();
+                    } else if (payload.state === 'Connected') {
+                        hasJoined = true; // Mark as joined
                     }
                 });
 
-                // Listen for video state changes
-                zoomClient.on('user-updated', handleUserUpdate);
-
-                // Join meeting
+                // Remove the user-updated listener that was causing issues
+                // Join meeting - only once!
+                console.log('Attempting to join meeting...');
                 await zoomClient.join({
                     sdkKey: sdkKey,
                     signature: signature,
@@ -292,6 +302,7 @@
                 });
 
                 console.log('✅ Successfully joined meeting');
+                hasJoined = true;
                 
                 // Hide loading screen
                 document.getElementById('loading').style.display = 'none';
@@ -300,40 +311,50 @@
                 startLayoutEnforcement();
 
                 // Start observing for self video
-                setTimeout(startVideoObservation, 2000);
+                setTimeout(startVideoObservation, 3000); // Increased delay to ensure meeting is stable
 
                 isInitialized = true;
 
             } catch (error) {
                 console.error('Meeting error:', error);
-                showError(error.message);
+                // Don't automatically retry on join errors
+                showError(getErrorMessage(error));
+            }
+        }
+
+        function getErrorMessage(error) {
+            if (error.type === 'INVALID_OPERATION' && error.reason === 'Duplicated join operation') {
+                return 'Meeting join already in progress. Please wait.';
+            } else if (error.type === 'JOIN_MEETING_FAILED') {
+                return 'Failed to join meeting. Please check your meeting credentials and try again.';
+            } else {
+                return error.message || 'Unable to join meeting. Please try again.';
             }
         }
 
         function startLayoutEnforcement() {
             // Continuous layout enforcement for Zoom containers
-            layoutInterval = setInterval(enforceFullScreen, 500);
+            layoutInterval = setInterval(enforceFullScreen, 1000); // Reduced frequency
             
             // Also enforce on any DOM changes
-            const layoutObserver = new MutationObserver(enforceFullScreen);
+            const layoutObserver = new MutationObserver(() => {
+                // Debounce layout enforcement
+                clearTimeout(window.layoutTimeout);
+                window.layoutTimeout = setTimeout(enforceFullScreen, 100);
+            });
             layoutObserver.observe(document.body, {
                 childList: true,
                 subtree: true
             });
         }
 
-        function handleUserUpdate(payload) {
-            // When user video state changes, update PIP
-            if (payload && payload.user) {
-                setTimeout(createSelfVideoPIP, 500);
-            }
-        }
-
         function startVideoObservation() {
+            if (!isInitialized || !hasJoined) return;
+
             // Use a more gentle observer with debouncing
             observer = new MutationObserver(() => {
                 clearTimeout(window.videoUpdateTimeout);
-                window.videoUpdateTimeout = setTimeout(createSelfVideoPIP, 300);
+                window.videoUpdateTimeout = setTimeout(createSelfVideoPIP, 500); // Increased delay
             });
 
             observer.observe(document.getElementById('meetingSDKElement'), {
@@ -342,12 +363,12 @@
                 attributes: false
             });
 
-            // Initial setup
-            createSelfVideoPIP();
+            // Initial setup with delay
+            setTimeout(createSelfVideoPIP, 1000);
         }
 
         function createSelfVideoPIP() {
-            if (!isInitialized) return;
+            if (!isInitialized || !hasJoined) return;
 
             try {
                 const meetingElement = document.getElementById('meetingSDKElement');
@@ -359,7 +380,7 @@
 
                 // Try to identify self video
                 videoElements.forEach(video => {
-                    if (video.readyState > 0 && !video.paused && !video.muted) {
+                    if (video.readyState > 0 && !video.paused) {
                         const container = video.closest('[class*="video-container"]');
                         if (container) {
                             const containerText = container.innerText || '';
@@ -457,7 +478,8 @@
             }
             
             isInitialized = false;
-            setTimeout(startMeeting, 1000);
+            hasJoined = false; // Reset join flag
+            setTimeout(startMeeting, 2000); // Increased delay before retry
         }
 
         function notifyAppAndClose() {
@@ -465,6 +487,10 @@
             if (observer) observer.disconnect();
             if (layoutInterval) clearInterval(layoutInterval);
             if (selfVideoPIP) selfVideoPIP.remove();
+
+            // Reset flags
+            isInitialized = false;
+            hasJoined = false;
 
             // Notify React Native app that meeting ended
             if (window.ReactNativeWebView) {
