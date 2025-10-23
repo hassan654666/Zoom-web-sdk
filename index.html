@@ -1,206 +1,629 @@
-<!DOCTYPE html>
+<!DOCTYPE html> /* It's better. Has PIP hides tile when video is turned on and shown in PIP. Fits width. */
 <html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-  <title>Zoom Meeting</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Zoom Meeting</title>
 
-  <!-- Zoom Embedded SDK -->
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
-  <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
+    <!-- Zoom Embedded SDK -->
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
+    <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
 
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 100vw; height: 100vh;
-      overflow: hidden; background: #000;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    #meetingContainer, #meetingSDKElement {
-      position: fixed; top: 0; left: 0;
-      width: 100vw; height: 100vh; background: #000;
-    }
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    /* Bottom strip for other tiles */
-    #tileStrip {
-      position: fixed; bottom: 10px; left: 0; right: 0;
-      height: 100px; display: flex; overflow-x: auto;
-      gap: 8px; padding: 8px; z-index: 12000;
-      background: rgba(0,0,0,0.4); backdrop-filter: blur(8px);
-    }
-    .tile-thumb {
-      flex: 0 0 auto; width: 120px; height: 90px;
-      border-radius: 6px; overflow: hidden; background: #222;
-      border: 2px solid transparent; cursor: pointer;
-    }
-    .tile-thumb.selected { border-color: #2D8CFF; }
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
 
-    .main-tile {
-      position: absolute; top: 0; left: 0;
-      width: 100vw; height: 100vh; background: #000;
-      display: flex; justify-content: center; align-items: center;
-      overflow: hidden;
-    }
+        #meetingContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
 
-    /* PIP */
-    .self-video-pip {
-      position: fixed !important;
-      bottom: 20px !important; right: 20px !important;
-      width: 120px !important; height: 160px !important;
-      z-index: 11000 !important;
-      border: 2px solid #fff !important;
-      border-radius: 8px !important;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
-      overflow: hidden !important; background: #000 !important;
-    }
-    .self-video-pip video { width: 100%; height: 100%; object-fit: cover; }
+        #meetingSDKElement {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
 
-    /* Modal */
-    #bottomModal {
-      position: fixed; bottom: -100%; left: 0; right: 0;
-      background: rgba(20,20,20,0.95); color: #fff;
-      padding: 20px; text-align: center;
-      transition: bottom 0.3s ease-in-out;
-      z-index: 13000; border-top-left-radius: 12px; border-top-right-radius: 12px;
-    }
-    #bottomModal.visible { bottom: 0; }
+        /* Force full screen for top-level Zoom containers */
+        #meetingSDKElement > div {
+            width: 100vw !important;
+            height: 100vh !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+        }
 
-    .tile-fullscreen-btn {
-      position: absolute; bottom: 8px; right: 8px;
-      background: rgba(0,0,0,0.6); color: #fff;
-      border: none; border-radius: 6px;
-      padding: 6px 8px; font-size: 14px; cursor: pointer; z-index: 12000;
-    }
+        /* ensure zoom UI controls are visible and centered */
+        [class*="footer"], [class*="toolbar"], [class*="control-bar"], [class*="video-operations"] {
+            position: fixed !important;
+            bottom: 8px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 10000 !important;
+            width: auto !important;
+            max-width: 95vw !important;
+            display: flex !important;
+            justify-content: center !important;
+            background: rgba(0,0,0,0.15) !important;
+            padding: 6px 10px !important;
+            border-radius: 10px !important;
+            pointer-events: auto !important;
+        }
 
-    #loading {
-      position: fixed; top: 0; left: 0;
-      width: 100vw; height: 100vh; background: #000;
-      display: flex; justify-content: center; align-items: center;
-      color: white; font-size: 18px; z-index: 12000;
-    }
-  </style>
+        /* Make sure video containers fill available space */
+        [class*="video-container"] {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* PIP for self video (local preview) */
+        .self-video-pip {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            width: 120px !important;
+            height: 160px !important;
+            z-index: 11000 !important;
+            border: 2px solid #fff !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
+            overflow: hidden !important;
+            background: #000 !important;
+            pointer-events: auto !important;
+        }
+
+        .self-video-pip video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+        }
+
+        /* Keep original local video in DOM but visually hidden so SDK still sends the track */
+        .self-video-original {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            opacity: 0 !important;
+            left: -9999px !important;
+            top: -9999px !important;
+            pointer-events: none !important;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 18px;
+            z-index: 12000;
+        }
+
+        #error {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            z-index: 12001;
+        }
+
+        .retry-btn {
+            background: #2D8CFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-top: 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        /* Responsive PIP sizing */
+        @media (orientation: landscape) {
+            .self-video-pip { width: 160px !important; height: 120px !important; }
+        }
+        @media (max-width: 768px) and (orientation: portrait) {
+            .self-video-pip { width: 100px !important; height: 133px !important; }
+        }
+
+        /* Fullscreen tile styles toggled by JS */
+        .tile-fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 10999 !important;
+            background: #000 !important;
+        }
+
+        /* The fullscreen button on each tile */
+        .tile-fullscreen-btn {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            z-index: 12000;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 14px;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+
+        /* ensure content wrappers take full viewport */
+        .meeting-client, .meeting-client-inner, .meeting-client-content {
+            width: 100vw !important;
+            height: 100vh !important;
+        }
+
+        /* small helper to keep injected buttons visible in dark/light themes */
+        .tile-fullscreen-btn:focus { outline: 2px solid rgba(45,140,255,0.7); }
+    </style>
 </head>
-
 <body>
-  <div id="meetingContainer">
-    <div id="meetingSDKElement"></div>
-    <div id="mainTile" class="main-tile"></div>
-    <div id="tileStrip"></div>
-  </div>
+    <div id="meetingContainer">
+        <div id="meetingSDKElement"></div>
+    </div>
 
-  <div id="loading">Joining meeting...</div>
-  <div id="bottomModal"></div>
+    <div id="loading">Joining meeting...</div>
 
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const meetingNumber = params.get("meetingNumber");
-    const signature = decodeURIComponent(params.get("signature") || "");
-    const sdkKey = params.get("sdkKey");
-    const userName = decodeURIComponent(params.get("name") || "Guest");
-    const password = decodeURIComponent(params.get("password") || "").trim();
+    <div id="error">
+        <h2>Unable to Join Meeting</h2>
+        <p id="errorMessage"></p>
+        <button class="retry-btn" onclick="retryJoin()">Try Again</button>
+    </div>
 
-    let zoomClient = null;
-    let isJoined = false;
-    let allTiles = [];
+    <script>
+        // URL params
+        const params = new URLSearchParams(window.location.search);
+        const meetingNumber = params.get("meetingNumber");
+        const signature = decodeURIComponent(params.get("signature") || "");
+        const sdkKey = params.get("sdkKey");
+        const userName = decodeURIComponent(params.get("name") || "Guest");
+        const password = decodeURIComponent(params.get("password") || "").trim();
 
-    function showModal(msg) {
-      const modal = document.getElementById("bottomModal");
-      modal.innerText = msg;
-      modal.classList.add("visible");
-      setTimeout(() => modal.classList.remove("visible"), 3000);
-    }
+        let zoomClient = null;
+        let observer = null;
+        let layoutObserver = null;
+        let selfVideoPIP = null;
+        let isInitialized = false;
+        let layoutInterval = null;
+        let hasJoined = false;
 
-    // Patch Zoom UI actions that don't render inside WebView
-    const uiIntercept = new MutationObserver(() => {
-      const chatBtn = document.querySelector('[aria-label*="Chat"],[data-tip*="Chat"]');
-      if (chatBtn && !chatBtn.dataset.hooked) {
-        chatBtn.dataset.hooked = "1";
-        chatBtn.onclick = (e) => { e.preventDefault(); showModal("Chat opened (in app modal)"); };
-      }
-      const shareBtn = document.querySelector('[aria-label*="Share"],[data-tip*="Share Screen"]');
-      if (shareBtn && !shareBtn.dataset.hooked) {
-        shareBtn.dataset.hooked = "1";
-        shareBtn.onclick = (e) => { e.preventDefault(); showModal("Screen sharing not available in WebView"); };
-      }
-      const settingsBtn = document.querySelector('[aria-label*="Settings"],[data-tip*="Settings"]');
-      if (settingsBtn && !settingsBtn.dataset.hooked) {
-        settingsBtn.dataset.hooked = "1";
-        settingsBtn.onclick = (e) => { e.preventDefault(); showModal("Settings not accessible here"); };
-      }
-    });
-    uiIntercept.observe(document.body, { childList: true, subtree: true });
+        // Debounce helpers
+        function debounce(fn, wait = 100) {
+            let t;
+            return (...args) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn.apply(this, args), wait);
+            };
+        }
 
-    function createThumbnail(videoEl, index) {
-      const thumb = document.createElement("div");
-      thumb.className = "tile-thumb";
-      thumb.appendChild(videoEl.cloneNode(true));
-      thumb.onclick = () => selectTile(index);
-      document.getElementById("tileStrip").appendChild(thumb);
-      return thumb;
-    }
+        // Force full-screen sizing - called often
+        function maintainFullScreen() {
+            // set root sizes
+            document.documentElement.style.width = window.innerWidth + 'px';
+            document.documentElement.style.height = window.innerHeight + 'px';
+            document.body.style.width = window.innerWidth + 'px';
+            document.body.style.height = window.innerHeight + 'px';
 
-    function selectTile(index) {
-      document.querySelectorAll(".tile-thumb").forEach((t, i) => {
-        t.classList.toggle("selected", i === index);
-      });
-      const mainTile = document.getElementById("mainTile");
-      mainTile.innerHTML = "";
-      const mainVid = allTiles[index].cloneNode(true);
-      mainTile.appendChild(mainVid);
-    }
+            const meetingContainer = document.getElementById('meetingContainer');
+            const meetingElement = document.getElementById('meetingSDKElement');
 
-    function captureTiles() {
-      const videos = document.querySelectorAll("#meetingSDKElement video");
-      if (!videos.length) return;
-      allTiles = Array.from(videos);
-      const strip = document.getElementById("tileStrip");
-      strip.innerHTML = "";
-      allTiles.forEach((v, i) => createThumbnail(v, i));
-      selectTile(0);
-    }
+            if (meetingContainer) {
+                meetingContainer.style.width = window.innerWidth + 'px';
+                meetingContainer.style.height = window.innerHeight + 'px';
+            }
+            if (meetingElement) {
+                meetingElement.style.width = window.innerWidth + 'px';
+                meetingElement.style.height = window.innerHeight + 'px';
+            }
 
-    function setupFullscreenButtons() {
-      const videos = document.querySelectorAll("#meetingSDKElement video");
-      videos.forEach(tile => {
-        if (tile.parentElement.querySelector(".tile-fullscreen-btn")) return;
-        const btn = document.createElement("button");
-        btn.className = "tile-fullscreen-btn";
-        btn.innerText = "⤢";
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          tile.requestFullscreen?.();
-        };
-        tile.parentElement.appendChild(btn);
-      });
-    }
+            // Force Zoom top-level children to full-screen
+            const zoomChildren = document.querySelectorAll('#meetingSDKElement > div');
+            zoomChildren.forEach(div => {
+                div.style.width = window.innerWidth + 'px';
+                div.style.height = window.innerHeight + 'px';
+                div.style.position = 'fixed';
+                div.style.top = '0';
+                div.style.left = '0';
+            });
 
-    async function initZoom() {
-      try {
-        const client = window.ZoomMtgEmbedded.createClient();
-        const meetingSDKElement = document.getElementById("meetingSDKElement");
-        client.init({
-          zoomAppRoot: meetingSDKElement,
-          language: "en-US",
-          customize: { meetingInfo: ["topic","host","mn"], toolbar: true }
+            // Also ensure internal wrappers are full
+            const wrappers = document.querySelectorAll('.meeting-client, .meeting-client-inner, .meeting-client-content');
+            wrappers.forEach(w => {
+                w.style.width = window.innerWidth + 'px';
+                w.style.height = window.innerHeight + 'px';
+            });
+        }
+        const debouncedMaintainFullScreen = debounce(maintainFullScreen, 80);
+
+        // Enforce layout repeatedly and on DOM changes
+        function startLayoutEnforcement() {
+            if (layoutInterval) clearInterval(layoutInterval);
+            layoutInterval = setInterval(maintainFullScreen, 1000); // periodic enforcement
+
+            // Observe DOM changes and reapply layout quickly (debounced)
+            if (layoutObserver) layoutObserver.disconnect();
+            layoutObserver = new MutationObserver(debouncedMaintainFullScreen);
+            layoutObserver.observe(document.body, { childList: true, subtree: true });
+        }
+
+        // Try to identify local video <video> element
+        function findLocalVideo(meetingEl) {
+            if (!meetingEl) return null;
+            const videoEls = meetingEl.querySelectorAll('video');
+            if (!videoEls || videoEls.length === 0) return null;
+
+            // Heuristics: find video whose container innerText includes userName OR container has data-self attribute
+            let candidate = null;
+            videoEls.forEach(v => {
+                try {
+                    const cont = v.closest('[class*="video-container"], [class*="video-item"], [class*="videoBox"]');
+                    const text = cont ? (cont.innerText || '') : '';
+                    const isSelfAttr = cont && (cont.getAttribute && cont.getAttribute('data-self') === 'true');
+                    // prefer exact name match
+                    if (text && userName && text.includes(userName)) {
+                        candidate = v;
+                    } else if (isSelfAttr && !candidate) {
+                        candidate = v;
+                    } else if (!candidate && v.readyState > 0 && !v.paused) {
+                        candidate = v;
+                    } else if (!candidate) {
+                        candidate = v;
+                    }
+                } catch(e) {
+                    /* ignore DOM read errors */
+                }
+            });
+            return candidate;
+        }
+
+        // Create PIP but keep original video in DOM (moved offscreen so SDK still transmits)
+        function createOrUpdateSelfPIP() {
+            if (!isInitialized || !hasJoined) return;
+            const meetingEl = document.getElementById('meetingSDKElement');
+            if (!meetingEl) return;
+
+            const localVid = findLocalVideo(meetingEl);
+            if (!localVid) return;
+
+            // ensure original is kept but visually hidden (so track remains active & other participants see you)
+            try {
+                const originalContainer = localVid.closest('[class*="video-container"], [class*="video-item"], [class*="videoBox"]');
+                if (originalContainer) {
+                    originalContainer.classList.add('self-video-original');
+                } else {
+                    localVid.classList.add('self-video-original');
+                }
+            } catch(e) { /* ignore */ }
+
+            // create PIP if not exists
+            if (!selfVideoPIP) {
+                selfVideoPIP = document.createElement('div');
+                selfVideoPIP.className = 'self-video-pip';
+                const pipVideo = document.createElement('video');
+                pipVideo.autoplay = true;
+                pipVideo.muted = true; // local PIP muted
+                pipVideo.playsInline = true;
+
+                // attach srcObject if present; otherwise clone via captureStream fallback
+                if (localVid.srcObject) {
+                    pipVideo.srcObject = localVid.srcObject;
+                } else if (localVid.captureStream) {
+                    try {
+                        pipVideo.srcObject = localVid.captureStream();
+                    } catch (err) { /* ignore */ }
+                } else {
+                    // fallback: set src if video src is available
+                    if (localVid.currentSrc) pipVideo.src = localVid.currentSrc;
+                }
+
+                selfVideoPIP.appendChild(pipVideo);
+                document.body.appendChild(selfVideoPIP);
+                updatePIPSize();
+                console.log('✅ Created/attached self PIP');
+            } else {
+                // update srcObject if it changed
+                const pipVideo = selfVideoPIP.querySelector('video');
+                if (pipVideo && localVid.srcObject && pipVideo.srcObject !== localVid.srcObject) {
+                    pipVideo.srcObject = localVid.srcObject;
+                }
+            }
+        }
+
+        function updatePIPSize() {
+            if (!selfVideoPIP) return;
+            if (window.innerHeight > window.innerWidth) {
+                // portrait
+                selfVideoPIP.style.width = '120px';
+                selfVideoPIP.style.height = '160px';
+            } else {
+                // landscape
+                selfVideoPIP.style.width = '160px';
+                selfVideoPIP.style.height = '120px';
+            }
+        }
+
+        // Add fullscreen toggle to each participant tile
+        function addFullscreenButtonsToTiles() {
+            const meetingEl = document.getElementById('meetingSDKElement');
+            if (!meetingEl) return;
+
+            // Candidate tile selectors (try several common Zoom classes). We'll add to anything that looks like a tile.
+            const tileSelectors = [
+                '[class*="video-container"]',
+                '[class*="video-item"]',
+                '[class*="videoBox"]',
+                '[class*="videoTile"]',
+                '[class*="gallery-view"]'
+            ];
+
+            const tiles = meetingEl.querySelectorAll(tileSelectors.join(','));
+            tiles.forEach(tile => {
+                try {
+                    // Avoid adding duplicate buttons
+                    if (tile.querySelector('.tile-fullscreen-btn')) return;
+
+                    // Create button
+                    const btn = document.createElement('button');
+                    btn.className = 'tile-fullscreen-btn';
+                    btn.setAttribute('aria-label', 'Toggle full screen tile');
+                    btn.innerText = '⤢';
+
+                    // State stored on tile dataset
+                    btn.onclick = (ev) => {
+                        ev.stopPropagation();
+                        // If already fullscreen, remove the class
+                        if (tile.classList.contains('tile-fullscreen')) {
+                            tile.classList.remove('tile-fullscreen');
+                            // restore sibling tiles
+                            document.querySelectorAll('[class*="video-container"], [class*="video-item"], [class*="videoBox"]').forEach(s => {
+                                if (!s.classList.contains('tile-fullscreen')) s.style.display = '';
+                            });
+                            // re-enable toolbar pointer events (some zoom UIs may be covered)
+                            restoreToolbarVisibility();
+                        } else {
+                            // enter fullscreen for this tile
+                            // hide other tiles visually but keep them in DOM
+                            document.querySelectorAll('[class*="video-container"], [class*="video-item"], [class*="videoBox"]').forEach(s => {
+                                if (s !== tile) s.style.display = 'none';
+                            });
+                            tile.classList.add('tile-fullscreen');
+                            // ensure toolbar is visible above tile
+                            ensureToolbarVisible();
+                        }
+                    };
+
+                    // Append button (positioned with CSS)
+                    // try to ensure tile is position:relative or has positioning, so absolute button will show
+                    if (getComputedStyle(tile).position === 'static') {
+                        tile.style.position = 'relative';
+                    }
+                    tile.appendChild(btn);
+                } catch (err) {
+                    /* ignore tile injection errors */
+                }
+            });
+        }
+
+        function ensureToolbarVisible() {
+            const toolbar = document.querySelector('[class*="footer"], [class*="toolbar"], [class*="control-bar"], [class*="video-operations"]');
+            if (toolbar) {
+                toolbar.style.zIndex = 12001;
+            }
+        }
+
+        function restoreToolbarVisibility() {
+            const toolbar = document.querySelector('[class*="footer"], [class*="toolbar"], [class*="control-bar"], [class*="video-operations"]');
+            if (toolbar) {
+                toolbar.style.zIndex = 10000;
+            }
+        }
+
+        // Observes for new tiles (DOM changes) and re-injects buttons
+        function observeAndInjectTileButtons() {
+            const meetingEl = document.getElementById('meetingSDKElement');
+            if (!meetingEl) return;
+
+            // quick initial injection
+            addFullscreenButtonsToTiles();
+
+            // Observe for new nodes
+            const tileObserver = new MutationObserver(debounce(() => {
+                addFullscreenButtonsToTiles();
+                createOrUpdateSelfPIP();
+            }, 300));
+            tileObserver.observe(meetingEl, { childList: true, subtree: true });
+        }
+
+        async function startMeeting() {
+            try {
+                if (hasJoined) {
+                    console.log('Already joined - skipping duplicate join');
+                    return;
+                }
+
+                if (!meetingNumber || !signature || !sdkKey) {
+                    throw new Error('Missing meeting parameters');
+                }
+
+                if (typeof window.ZoomMtgEmbedded === 'undefined') {
+                    throw new Error('Zoom SDK not loaded');
+                }
+
+                console.log('Starting Zoom meeting...');
+
+                // initial layout
+                maintainFullScreen();
+
+                zoomClient = window.ZoomMtgEmbedded.createClient();
+
+                await zoomClient.init({
+                    zoomAppRoot: document.getElementById('meetingSDKElement'),
+                    language: 'en-US',
+                    patchJsMedia: true
+                });
+
+                zoomClient.on('connection-change', (payload) => {
+                    console.log('Connection change:', payload.state);
+                    if (payload.state === 'Closed') {
+                        hasJoined = false;
+                        notifyAppAndClose();
+                    } else if (payload.state === 'Connected') {
+                        hasJoined = true;
+                    }
+                });
+
+                // join
+                console.log('Attempting to join meeting...');
+                await zoomClient.join({
+                    sdkKey: sdkKey,
+                    signature: signature,
+                    meetingNumber: meetingNumber,
+                    password: password,
+                    userName: userName
+                });
+
+                console.log('✅ Successfully joined meeting');
+                hasJoined = true;
+                document.getElementById('loading').style.display = 'none';
+
+                // Start enforcement and observers
+                startLayoutEnforcement();
+                observeAndInjectTileButtons();
+
+                // start video observation after a small delay (Zoom needs time)
+                setTimeout(() => {
+                    createOrUpdateSelfPIP();
+                }, 2200);
+
+                // keep PIP updated periodically (best-effort)
+                setInterval(() => {
+                    createOrUpdateSelfPIP();
+                    addFullscreenButtonsToTiles();
+                }, 2000);
+
+                isInitialized = true;
+            } catch (error) {
+                console.error('Meeting start error:', error);
+                showError(getErrorMessage(error));
+            }
+        }
+
+        function getErrorMessage(error) {
+            try {
+                if (error && typeof error === 'object') {
+                    if (error.type === 'INVALID_OPERATION' && error.reason === 'Duplicated join operation') {
+                        return 'Meeting join already in progress.';
+                    } else if (error.type === 'JOIN_MEETING_FAILED') {
+                        return 'Failed to join meeting. Please check the meeting credentials.';
+                    } else if (error.message) {
+                        return error.message;
+                    }
+                }
+                return String(error || 'Unable to join meeting.');
+            } catch (e) {
+                return 'Unable to join meeting.';
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const err = document.getElementById('error');
+            err.style.display = 'flex';
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        function retryJoin() {
+            const err = document.getElementById('error');
+            err.style.display = 'none';
+            document.getElementById('loading').style.display = 'flex';
+
+            // cleanup
+            if (observer) observer.disconnect();
+            if (layoutObserver) layoutObserver.disconnect();
+            if (layoutInterval) clearInterval(layoutInterval);
+            if (selfVideoPIP) {
+                try { selfVideoPIP.remove(); } catch(e) {}
+                selfVideoPIP = null;
+            }
+
+            isInitialized = false;
+            hasJoined = false;
+            setTimeout(startMeeting, 800);
+        }
+
+        function notifyAppAndClose() {
+            // cleanup
+            try { if (observer) observer.disconnect(); } catch(e) {}
+            try { if (layoutObserver) layoutObserver.disconnect(); } catch(e) {}
+            try { if (layoutInterval) clearInterval(layoutInterval); } catch(e) {}
+            try { if (selfVideoPIP) selfVideoPIP.remove(); } catch(e) {}
+
+            isInitialized = false;
+            hasJoined = false;
+
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'meetingEnded' }));
+            } else {
+                setTimeout(() => alert('Meeting ended. You can close this window.'), 500);
+            }
+        }
+
+        // window events
+        window.addEventListener('DOMContentLoaded', startMeeting);
+        window.addEventListener('resize', debouncedMaintainFullScreen);
+        window.addEventListener('orientationchange', () => {
+            // give Zoom some time to re-render then enforce layout
+            setTimeout(() => {
+                maintainFullScreen();
+                updatePIPSize();
+                addFullscreenButtonsToTiles();
+            }, 600);
         });
-        await client.join({ sdkKey, signature, meetingNumber, password, userName });
-        isJoined = true;
-        document.getElementById("loading").style.display = "none";
-        setTimeout(() => {
-          captureTiles();
-          setupFullscreenButtons();
-        }, 4000);
-      } catch (err) {
-        console.error("Zoom join failed", err);
-        document.getElementById("loading").innerText = "Join failed.";
-      }
-    }
 
-    window.onload = initZoom;
-  </script>
+        // global error logging
+        window.addEventListener('error', (ev) => {
+            console.error('Global error:', ev.error || ev);
+        });
+    </script>
 </body>
 </html>
