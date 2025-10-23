@@ -1,108 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
     <meta charset="utf-8" />
     <title>Zoom Meeting</title>
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
-    />
+
+    <!-- Zoom Web SDK -->
     <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
     <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+
     <style>
       html,
       body {
-        margin: 0;
         height: 100%;
         width: 100%;
-        background: #000;
+        margin: 0;
+        padding: 0;
+        background-color: #000;
         overflow: hidden;
       }
+
       #meetingSDKElement {
         position: fixed;
-        inset: 0;
-        width: 100vw;
+        top: 0;
+        left: 0;
         height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        width: 100vw;
       }
+
       #errorBox {
-        position: absolute;
-        top: 10px;
-        width: 100%;
-        text-align: center;
         color: #ff4d4d;
-        font-size: 14px;
+        text-align: center;
+        margin-top: 20px;
+        font-family: sans-serif;
       }
+
       #loading {
         color: white;
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-      }
-      #leaveBtn {
-        position: absolute;
-        top: 15px;
-        left: 15px;
-        background-color: #ff3b30;
-        border: none;
-        color: white;
-        padding: 10px 18px;
-        border-radius: 8px;
-        cursor: pointer;
-        z-index: 10000;
-      }
-      .fullscreen-btn {
-        position: absolute;
-        bottom: 8px;
-        right: 8px;
-        background: rgba(0, 0, 0, 0.6);
-        border: none;
-        color: white;
-        padding: 6px 10px;
-        font-size: 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        z-index: 9999;
-      }
-      .participant-tile.fullscreen {
-        position: fixed !important;
-        top: 0;
-        left: 0;
-        width: 100vw !important;
-        height: 100vh !important;
-        z-index: 9998;
-        background: #000;
+        font-family: sans-serif;
+        font-size: 16px;
       }
     </style>
   </head>
+
   <body>
     <div id="meetingSDKElement"></div>
-    <div id="errorBox"></div>
     <div id="loading">Joining meeting...</div>
-    <button id="leaveBtn">Leave Meeting</button>
+    <div id="errorBox"></div>
 
     <script>
-      async function main() {
+      window.addEventListener("DOMContentLoaded", async () => {
         const params = new URLSearchParams(window.location.search);
         const meetingNumber = params.get("meetingNumber");
-        const sdkKey = params.get("sdkKey");
         const signature = decodeURIComponent(params.get("signature") || "");
+        const sdkKey = params.get("sdkKey");
         const userName = decodeURIComponent(params.get("name") || "Guest");
-        const password = decodeURIComponent(params.get("password") || "");
+        const password = decodeURIComponent(params.get("password") || "").trim();
 
-        const errorBox = document.getElementById("errorBox");
         const loading = document.getElementById("loading");
-        const leaveBtn = document.getElementById("leaveBtn");
+        const errorBox = document.getElementById("errorBox");
 
-        if (!meetingNumber || !sdkKey || !signature) {
-          showError("Missing meeting parameters");
+        if (!meetingNumber || !signature || !sdkKey) {
+          errorBox.innerText = "❌ Missing required parameters.";
+          loading.style.display = "none";
           return;
         }
 
@@ -113,7 +85,18 @@
           await client.init({
             zoomAppRoot: meetingSDKElement,
             language: "en-US",
-            patchJsMedia: true,
+            customize: {
+              video: { isResizable: true },
+              meetingInfo: [
+                "topic",
+                "host",
+                "mn",
+                "participant",
+                "invite",
+                "joinTime",
+                "whiteboard",
+              ],
+            },
           });
 
           await client.join({
@@ -125,66 +108,29 @@
           });
 
           loading.style.display = "none";
+          console.log("✅ Joined meeting successfully");
 
-          // 🟥 Leave meeting
-          leaveBtn.onclick = async () => {
-            try {
-              await client.leave();
-              notifyApp({ action: "exitMeeting" });
-            } catch (err) {
-              showError("Failed to leave meeting");
+          // Detect when meeting ends
+          client.on("connection-change", (payload) => {
+            if (payload.state === "Closed") {
+              notifyApp("meetingEnded");
             }
-          };
-
-          // 🧩 Observe tiles and add fullscreen toggle
-          const observer = new MutationObserver(() => {
-            document
-              .querySelectorAll(".participant-tile:not([data-fs])")
-              .forEach((tile) => {
-                tile.dataset.fs = "1";
-                const btn = document.createElement("button");
-                btn.className = "fullscreen-btn";
-                btn.innerText = "Full Screen";
-                btn.onclick = () => {
-                  const isFull = tile.classList.toggle("fullscreen");
-                  btn.innerText = isFull ? "Exit" : "Full Screen";
-                };
-                tile.appendChild(btn);
-              });
           });
-          observer.observe(meetingSDKElement, { childList: true, subtree: true });
         } catch (err) {
-          console.error(err);
-          showError("Failed to join meeting");
-        }
-
-        function showError(msg) {
+          console.error("❌ Error joining meeting:", err);
+          errorBox.innerText = "❌ Failed to join meeting. Check console.";
           loading.style.display = "none";
-          errorBox.innerText = "❌ " + msg;
-          errorBox.style.display = "block";
-          notifyApp({ action: "error", message: msg });
         }
 
-        function notifyApp(data) {
+        // Notify React Native app
+        function notifyApp(action) {
           if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify(data));
+            window.ReactNativeWebView.postMessage(JSON.stringify({ action }));
           } else {
-            alert(data.message || data.action);
+            alert("Meeting ended — you can close this tab.");
           }
         }
-
-        // Handle app background/foreground messages
-        window.addEventListener("message", (e) => {
-          try {
-            const data = JSON.parse(e.data);
-            if (data.action === "appStateChanged") {
-              console.log("App state:", data.state);
-            }
-          } catch {}
-        });
-      }
-
-      main();
+      });
     </script>
   </body>
 </html>
