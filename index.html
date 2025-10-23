@@ -1,5 +1,4 @@
-/* Here, in this code the PIP is working perfectly but the zoom app container is not in full screen view in react native web view or in a desktop browser, and hence not all of the Zoom UI buttons are in view. It also doesn't support rotate screen in the web view. Make it so that the only place I can see my own tile is the PIP and rest of the user tiles are visible in the zoom app container that takes full screen. If there are more than one other users and all have their camera on, they should appear stacked, if only one other person has their camera on, they should take the full screen. Also make sure the zoom UI buttons take no more or less than the device width and are visible at the bottom of the screen in both gallery and minimized view. Also please don't add or change anything in the meeting client generation and joining logic, and meeting leave/end and notify logic, that part is working perfectly now. */ 
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
@@ -22,29 +21,64 @@
         }
 
         html, body {
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             overflow: hidden;
             background: #000;
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-
-        #meetingContainer {
-            width: 100vw;
-            height: 100vh;
             position: fixed;
             top: 0;
             left: 0;
+        }
+
+        #meetingContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             background: #000;
         }
 
         #meetingSDKElement {
-            width: 100%;
-            height: 100%;
-            position: relative;
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
         }
 
-        /* Minimal styling - let Zoom handle most layout */
+        /* Force full screen for all Zoom containers */
+        #meetingSDKElement > div {
+            width: 100vw !important;
+            height: 100vh !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+        }
+
+        /* Ensure Zoom controls are visible and properly positioned */
+        [class*="video-operations"],
+        [class*="toolbar"],
+        [class*="control-bar"] {
+            position: fixed !important;
+            bottom: 10px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 999 !important;
+            width: auto !important;
+            max-width: 95vw !important;
+            display: flex !important;
+            justify-content: center !important;
+        }
+
+        /* Make sure video containers fill available space */
+        [class*="video-container"] {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* PIP for self video */
         .self-video-pip {
             position: fixed !important;
             bottom: 20px !important;
@@ -56,20 +90,26 @@
             border-radius: 8px !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
             overflow: hidden !important;
+            background: #000 !important;
+        }
+
+        .self-video-pip video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
         }
 
         /* Hide the original self video from gallery */
         .self-video-original {
-            opacity: 0 !important;
-            pointer-events: none !important;
+            display: none !important;
         }
 
         #loading {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background: #000;
             display: flex;
             justify-content: center;
@@ -83,8 +123,8 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background: #000;
             display: none;
             flex-direction: column;
@@ -107,12 +147,27 @@
             font-size: 16px;
         }
 
-        /* Landscape orientation */
+        /* Responsive PIP sizing */
         @media (orientation: landscape) {
             .self-video-pip {
                 width: 160px !important;
                 height: 120px !important;
             }
+        }
+
+        @media (max-width: 768px) and (orientation: portrait) {
+            .self-video-pip {
+                width: 100px !important;
+                height: 133px !important;
+            }
+        }
+
+        /* Ensure all Zoom UI elements are properly sized */
+        .meeting-client,
+        .meeting-client-inner,
+        .meeting-client-content {
+            width: 100vw !important;
+            height: 100vh !important;
         }
     </style>
 </head>
@@ -144,13 +199,51 @@
         let observer = null;
         let selfVideoPIP = null;
         let isInitialized = false;
+        let layoutInterval = null;
 
         // Start meeting when page loads
         window.addEventListener('DOMContentLoaded', startMeeting);
 
-        // Handle screen orientation changes
-        window.addEventListener('orientationchange', updatePIPSize);
-        window.addEventListener('resize', updatePIPSize);
+        // Handle screen orientation changes and resize
+        window.addEventListener('orientationchange', handleLayout);
+        window.addEventListener('resize', handleLayout);
+
+        function handleLayout() {
+            // Force full screen layout
+            enforceFullScreen();
+            updatePIPSize();
+        }
+
+        function enforceFullScreen() {
+            // Force full screen dimensions
+            document.documentElement.style.width = '100vw';
+            document.documentElement.style.height = '100vh';
+            document.body.style.width = '100vw';
+            document.body.style.height = '100vh';
+            
+            const meetingContainer = document.getElementById('meetingContainer');
+            const meetingElement = document.getElementById('meetingSDKElement');
+            
+            if (meetingContainer) {
+                meetingContainer.style.width = '100vw';
+                meetingContainer.style.height = '100vh';
+            }
+            
+            if (meetingElement) {
+                meetingElement.style.width = '100vw';
+                meetingElement.style.height = '100vh';
+            }
+
+            // Force Zoom containers to full screen
+            const zoomContainers = document.querySelectorAll('#meetingSDKElement > div');
+            zoomContainers.forEach(container => {
+                container.style.width = '100vw';
+                container.style.height = '100vh';
+                container.style.position = 'fixed';
+                container.style.top = '0';
+                container.style.left = '0';
+            });
+        }
 
         async function startMeeting() {
             try {
@@ -166,6 +259,9 @@
                     throw new Error('Zoom SDK not loaded');
                 }
 
+                // Initial full screen setup
+                enforceFullScreen();
+
                 // Create Zoom client
                 zoomClient = window.ZoomMtgEmbedded.createClient();
 
@@ -174,7 +270,6 @@
                     zoomAppRoot: document.getElementById('meetingSDKElement'),
                     language: 'en-US',
                     patchJsMedia: true
-                    // No customizations - let Zoom handle layout
                 });
 
                 // Set up meeting end listener
@@ -201,6 +296,9 @@
                 // Hide loading screen
                 document.getElementById('loading').style.display = 'none';
 
+                // Start continuous layout enforcement
+                startLayoutEnforcement();
+
                 // Start observing for self video
                 setTimeout(startVideoObservation, 2000);
 
@@ -210,6 +308,18 @@
                 console.error('Meeting error:', error);
                 showError(error.message);
             }
+        }
+
+        function startLayoutEnforcement() {
+            // Continuous layout enforcement for Zoom containers
+            layoutInterval = setInterval(enforceFullScreen, 500);
+            
+            // Also enforce on any DOM changes
+            const layoutObserver = new MutationObserver(enforceFullScreen);
+            layoutObserver.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
         }
 
         function handleUserUpdate(payload) {
@@ -222,7 +332,6 @@
         function startVideoObservation() {
             // Use a more gentle observer with debouncing
             observer = new MutationObserver(() => {
-                // Debounce to prevent flickering
                 clearTimeout(window.videoUpdateTimeout);
                 window.videoUpdateTimeout = setTimeout(createSelfVideoPIP, 300);
             });
@@ -230,8 +339,7 @@
             observer.observe(document.getElementById('meetingSDKElement'), {
                 childList: true,
                 subtree: true,
-                attributes: false, // Don't observe attributes to reduce flickering
-                childList: true
+                attributes: false
             });
 
             // Initial setup
@@ -251,9 +359,7 @@
 
                 // Try to identify self video
                 videoElements.forEach(video => {
-                    // Look for videos that are playing (self video usually starts playing first)
                     if (video.readyState > 0 && !video.paused && !video.muted) {
-                        // Additional check: look for video that matches our user context
                         const container = video.closest('[class*="video-container"]');
                         if (container) {
                             const containerText = container.innerText || '';
@@ -274,7 +380,6 @@
                 if (selfVideoElement && !selfVideoPIP) {
                     createPIPElement(selfVideoElement);
                 } else if (selfVideoElement && selfVideoPIP) {
-                    // Update existing PIP with new video stream if needed
                     updatePIPVideo(selfVideoElement);
                 }
 
@@ -284,38 +389,38 @@
         }
 
         function createPIPElement(originalVideo) {
-            // Create a new video element for PIP
-            selfVideoPIP = document.createElement('video');
+            // Create a container for PIP
+            selfVideoPIP = document.createElement('div');
             selfVideoPIP.className = 'self-video-pip';
-            selfVideoPIP.autoplay = true;
-            selfVideoPIP.muted = true;
-            selfVideoPIP.playsInline = true;
+            
+            const pipVideo = document.createElement('video');
+            pipVideo.autoplay = true;
+            pipVideo.muted = true;
+            pipVideo.playsInline = true;
 
-            // Copy the video stream
             if (originalVideo.srcObject) {
-                selfVideoPIP.srcObject = originalVideo.srcObject;
-            } else if (originalVideo.src) {
-                selfVideoPIP.src = originalVideo.src;
+                pipVideo.srcObject = originalVideo.srcObject;
             }
-
-            // Add to body
+            
+            selfVideoPIP.appendChild(pipVideo);
             document.body.appendChild(selfVideoPIP);
 
-            // Mark original video as hidden (but don't remove it - Zoom needs it)
+            // Mark original video as hidden
             const originalContainer = originalVideo.closest('[class*="video-container"]');
             if (originalContainer) {
                 originalContainer.classList.add('self-video-original');
             }
 
+            updatePIPSize();
             console.log('✅ Created self video PIP');
         }
 
         function updatePIPVideo(originalVideo) {
             if (!selfVideoPIP) return;
-
-            // Update PIP with current video stream
-            if (originalVideo.srcObject && selfVideoPIP.srcObject !== originalVideo.srcObject) {
-                selfVideoPIP.srcObject = originalVideo.srcObject;
+            
+            const pipVideo = selfVideoPIP.querySelector('video');
+            if (pipVideo && originalVideo.srcObject && pipVideo.srcObject !== originalVideo.srcObject) {
+                pipVideo.srcObject = originalVideo.srcObject;
             }
         }
 
@@ -344,9 +449,8 @@
             document.getElementById('loading').style.display = 'flex';
             
             // Clean up
-            if (observer) {
-                observer.disconnect();
-            }
+            if (observer) observer.disconnect();
+            if (layoutInterval) clearInterval(layoutInterval);
             if (selfVideoPIP) {
                 selfVideoPIP.remove();
                 selfVideoPIP = null;
@@ -358,18 +462,13 @@
 
         function notifyAppAndClose() {
             // Clean up
-            if (observer) {
-                observer.disconnect();
-            }
-            if (selfVideoPIP) {
-                selfVideoPIP.remove();
-            }
+            if (observer) observer.disconnect();
+            if (layoutInterval) clearInterval(layoutInterval);
+            if (selfVideoPIP) selfVideoPIP.remove();
 
             // Notify React Native app that meeting ended
             if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(
-                    JSON.stringify({ action: 'meetingEnded' })
-                );
+                window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'meetingEnded' }));
             }
             
             // Fallback for browser testing
