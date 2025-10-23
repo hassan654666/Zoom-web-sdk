@@ -1,29 +1,33 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Zoom Meeting</title>
-
-  <!-- Zoom SDK v4.0.7 -->
   <script src="https://source.zoom.us/4.0.7/lib/vendor/react.min.js"></script>
   <script src="https://source.zoom.us/4.0.7/lib/vendor/react-dom.min.js"></script>
-  <script src="https://source.zoom.us/4.0.7/lib/vendor/redux.min.js"></script>
-  <script src="https://source.zoom.us/4.0.7/lib/vendor/redux-thunk.min.js"></script>
-  <script src="https://source.zoom.us/4.0.7/lib/vendor/lodash.min.js"></script>
   <script src="https://source.zoom.us/4.0.7/zoom-meeting-embedded-4.0.7.min.js"></script>
-
   <style>
-    /* your existing styles */
+    html, body {
+      height: 100%; margin: 0; background: #000; overflow: hidden;
+    }
+    #meeting-container {
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      top: 0; left: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: black;
+    }
+    @media screen and (orientation: landscape) {
+      #meeting-container { flex-direction: row; }
+    }
   </style>
 </head>
 <body>
-  <div id="meetingContainer">
-    <div id="meetingSDKElement"></div>
-  </div>
-  <div id="loading">Joining meeting...</div>
-  <div id="error">…</div>
-
+  <div id="meeting-container"></div>
   <script>
     const params = new URLSearchParams(window.location.search);
     const meetingNumber = params.get("meetingNumber");
@@ -32,61 +36,56 @@
     const userName = decodeURIComponent(params.get("name") || "Guest");
     const password = decodeURIComponent(params.get("password") || "").trim();
 
-    let client = null;
+    const client = window.ZoomMtgEmbedded.createClient();
+    const meetingContainer = document.getElementById('meeting-container');
 
     async function startMeeting() {
       try {
-        if (!meetingNumber || !signature || !sdkKey) throw new Error('Missing meeting params');
-
-        client = window.ZoomMtgEmbedded.createClient();
-
         await client.init({
-          zoomAppRoot: document.getElementById('meetingSDKElement'),
+          zoomAppRoot: meetingContainer,
           language: 'en-US',
-          patchJsMedia: true,
-          // If v4 requires leaveUrl:
-          // leaveUrl: window.location.href
+          customize: {
+            video: {
+              viewSizes: { default: 'contain' },
+              isResizable: true,
+              layout: 'gallery',
+              popper: { disable: false },
+            },
+            toolbar: {
+              buttons: ['mute', 'camera', 'participants', 'chat', 'share', 'record', 'emoji', 'leave'],
+            },
+          },
+          sdkKey, // ✅ now placed correctly in init()
         });
 
-        await client.join({
-          sdkKey,
-          signature,
+        const joinResponse = await client.join({
           meetingNumber,
-          password,
           userName,
-          role: 0 // add role if required by v4
+          signature,
+          password,
         });
 
-        document.getElementById('loading').style.display = 'none';
+        console.log('✅ Joined meeting:', joinResponse);
 
-        // connection-change listener
-        client.on('connection-change', payload => {
-          if (payload.state === 'Closed') {
-            notifyAppAndClose();
+        client.on('connection-change', (payload) => {
+          console.log('🧭 Connection change:', payload);
+        });
+
+        client.on('leave-meeting', (data) => {
+          console.log('👋 Left meeting:', data);
+          // Notify React Native app via window.ReactNativeWebView
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'leave-meeting' }));
           }
         });
 
       } catch (error) {
-        console.error('Join failed:', error);
-        showError(error.message || 'Join failed');
+        console.error('❌ Join failed:', error);
+        alert('Failed to join: ' + JSON.stringify(error));
       }
     }
 
-    function notifyAppAndClose() {
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'meetingEnded' }));
-      } else {
-        alert('Meeting ended');
-      }
-    }
-
-    function showError(msg) {
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('error').style.display = 'flex';
-      document.getElementById('errorMessage').textContent = msg;
-    }
-
-    window.addEventListener('DOMContentLoaded', startMeeting);
+    startMeeting();
   </script>
 </body>
 </html>
