@@ -1,811 +1,816 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>Zoom Meeting</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>Zoom Meeting (Embedded)</title>
 
-    <!-- Zoom Embedded SDK -->
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
-    <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
+  <!-- Zoom Embedded SDK -->
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/react.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/react-dom.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/redux-thunk.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/lib/vendor/lodash.min.js"></script>
+  <script src="https://source.zoom.us/3.12.0/zoom-meeting-embedded-3.12.0.min.js"></script>
 
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+  <style>
+    /* --- Base full-screen container --- */
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{
+      width:100vw;height:100vh;overflow:hidden;background:#000;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,"Helvetica Neue",Arial;
+    }
+    #meetingContainer{
+      position:fixed;top:0;left:0;width:100vw;height:100vh;display:flex;flex-direction:column;background:#000;
+    }
 
-        html, body {
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            background: #000;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            position: fixed;
-            top: 0;
-            left: 0;
-        }
+    /* SDK root area (we keep the SDK in this element) */
+    #meetingSDKElement{
+      position:relative;width:100vw;height:calc(100vh - 120px); /* reserve bottom area for thumbnails + controls */
+      overflow:hidden;
+      -webkit-user-select:none;
+      user-select:none;
+    }
 
-        #meetingContainer {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            display: flex;
-            flex-direction: column;
-        }
+    /* Main video container will host one main tile (we will show the selected tile here) */
+    #mainVideoContainer{
+      width:100%;height:100%;background:#000;position:relative;z-index:2;
+      display:flex;align-items:center;justify-content:center;
+    }
 
-        #meetingSDKElement {
-            width: 100vw;
-            height: calc(100vh - 80px); /* Reserve space for thumbnail bar */
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
+    /* Thumbnail scroll bar bottom (auto-hides after inactivity) */
+    #thumbnailBar{
+      position:fixed;bottom:56px;left:0;right:0;height:96px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,0.6));display:flex;align-items:center;padding:8px 12px;gap:10px;overflow-x:auto;overflow-y:hidden;z-index:10010;transition:opacity .25s;
+      -webkit-overflow-scrolling:touch;
+    }
+    #thumbnailBar.hidden{opacity:0;pointer-events:none}
 
-        /* Main video view - single participant */
-        #mainVideoContainer {
-            width: 100%;
-            height: 100%;
-            background: #000;
-            position: relative;
-            display: none; /* Initially hidden */
-        }
+    .thumbnail{
+      flex:0 0 auto;width:80px;height:80px;border-radius:8px;background:#111;border:2px solid transparent;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative;
+    }
+    .thumbnail.active{border-color:#2D8CFF}
+    .thumbnail video{width:100%;height:100%;object-fit:cover;display:block}
 
-        /* Thumbnail bar at the bottom */
-        #thumbnailBar {
-            position: fixed;
-            bottom: 60px;
-            left: 0;
-            width: 100%;
-            height: 80px;
-            background: rgba(0,0,0,0.7);
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            overflow-x: auto;
-            z-index: 10000;
-            gap: 8px;
-        }
+    .thumbnail .thumb-name{position:absolute;left:4px;right:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#fff;font-size:11px;padding:2px 4px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-        .thumbnail {
-            width: 60px;
-            height: 60px;
-            border-radius: 8px;
-            background: #333;
-            border: 2px solid transparent;
-            cursor: pointer;
-            flex-shrink: 0;
-            position: relative;
-            overflow: hidden;
-        }
+    /* Custom control overlay (we do not replace Zoom buttons, this is only a small helper area for leave) */
+    #controlOverlay{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:10020;display:flex;gap:8px;pointer-events:none}
+    #controlOverlay button{pointer-events:auto;background:rgba(255,255,255,0.06);border:0;color:#fff;padding:8px 10px;border-radius:8px;font-size:14px}
 
-        .thumbnail.active {
-            border-color: #2D8CFF;
-        }
+    /* Bottom modals (bottom-sheet style) */
+    .bottom-modal{position:fixed;left:0;right:0;bottom:0;height:52%;max-height:70%;background:rgba(0,0,0,0.95);z-index:15000;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .28s ease;backdrop-filter:blur(6px)}
+    .bottom-modal.open{transform:translateY(0)}
+    .bottom-modal .modal-header{padding:12px;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+    .bottom-modal .modal-body{flex:1;overflow:auto;padding:8px 12px;background:transparent;color:#fff}
 
-        .thumbnail video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+    /* PIP fallback (only used if scroll view fails) */
+    .self-video-pip{
+      position:fixed;right:12px;bottom:120px;width:160px;height:120px;border-radius:8px;z-index:10030;border:2px solid #fff;overflow:hidden;background:#000;box-shadow:0 8px 20px rgba(0,0,0,.6)
+    }
+    .self-video-pip video{width:100%;height:100%;object-fit:cover}
 
-        .thumbnail-name {
-            position: absolute;
-            bottom: 2px;
-            left: 2px;
-            right: 2px;
-            background: rgba(0,0,0,0.6);
-            color: white;
-            font-size: 10px;
-            padding: 2px 4px;
-            border-radius: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+    /* Make Zoom toolbar reflow and never be cropped (we try to find the toolbar and style it) */
+    /* We apply these with JS to the discovered toolbar(s) too, but provide defaults here */
+    .zoom-toolbar-flex{
+      position:fixed !important; bottom:8px !important; left:50% !important; transform:translateX(-50%) !important; z-index:12000 !important;
+      display:flex !important; gap:8px !important; align-items:center !important; padding:6px 10px !important; border-radius:12px !important; max-width:95vw !important; overflow:hidden;
+      background:linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.26)) !important;
+      box-shadow:0 6px 18px rgba(0,0,0,0.5) !important;
+      flex-wrap:wrap !important;
+    }
 
-        /* Force full screen for top-level Zoom containers */
-        #meetingSDKElement > div {
-            width: 100vw !important;
-            height: 100vh !important;
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-        }
+    /* Stacked fallback view - vertical tiles */
+    .stacked-tiles{display:flex;flex-direction:column;gap:10px;padding:12px;overflow:auto;height:100%}
+    .stacked-tiles .stacked-tile{background:#0b0b0b;border-radius:8px;padding:6px;border:1px solid rgba(255,255,255,0.03);min-height:120px}
 
-        /* Custom controls bar */
-        #customControls {
-            position: fixed;
-            bottom: 8px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10001;
-            background: rgba(0,0,0,0.15);
-            padding: 6px 10px;
-            border-radius: 10px;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
+    /* ensure SDK wrappers fill viewport */
+    .meeting-client, .meeting-client-inner, .meeting-client-content{width:100vw !important;height:calc(100vh - 120px) !important}
 
-        .control-btn {
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            min-width: 60px;
-        }
-
-        .control-btn:active {
-            background: rgba(255,255,255,0.2);
-        }
-
-        /* Modal for chat, settings, etc */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0,0,0,0.8);
-            z-index: 20000;
-            display: none;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            max-width: 90vw;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-
-        .modal-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        .modal-close {
-            background: #2D8CFF;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            margin-top: 15px;
-            cursor: pointer;
-        }
-
-        /* PIP for self video */
-        .self-video-pip {
-            position: fixed !important;
-            bottom: 90px !important;
-            right: 20px !important;
-            width: 120px !important;
-            height: 160px !important;
-            z-index: 11000 !important;
-            border: 2px solid #fff !important;
-            border-radius: 8px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
-            overflow: hidden !important;
-            background: #000 !important;
-            pointer-events: auto !important;
-        }
-
-        .self-video-pip video {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
-        }
-
-        /* Hidden original video */
-        .self-video-original {
-            position: absolute !important;
-            width: 1px !important;
-            height: 1px !important;
-            opacity: 0 !important;
-            left: -9999px !important;
-            top: -9999px !important;
-            pointer-events: none !important;
-        }
-
-        #loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-size: 18px;
-            z-index: 12000;
-        }
-
-        #error {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            text-align: center;
-            padding: 20px;
-            z-index: 12001;
-        }
-
-        .retry-btn {
-            background: #2D8CFF;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            margin-top: 20px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        /* Fullscreen tile */
-        .tile-fullscreen {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            z-index: 10999 !important;
-            background: #000 !important;
-        }
-
-        .tile-fullscreen-btn {
-            position: absolute;
-            bottom: 8px;
-            right: 8px;
-            z-index: 12000;
-            background: rgba(0,0,0,0.6);
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            padding: 6px 8px;
-            font-size: 14px;
-            cursor: pointer;
-            pointer-events: auto;
-        }
-
-        /* Responsive */
-        @media (orientation: landscape) {
-            .self-video-pip { width: 160px !important; height: 120px !important; }
-        }
-        @media (max-width: 768px) and (orientation: portrait) {
-            .self-video-pip { width: 100px !important; height: 133px !important; }
-        }
-    </style>
+    /* Minimal responsive tweaks */
+    @media (max-width:640px){
+      #meetingSDKElement{height:calc(100vh - 120px)}
+      .thumbnail{width:68px;height:68px}
+      .self-video-pip{width:120px;height:90px}
+    }
+  </style>
 </head>
 <body>
-    <div id="meetingContainer">
-        <div id="mainVideoContainer"></div>
-        <div id="meetingSDKElement"></div>
-    </div>
+  <div id="meetingContainer">
+    <div id="mainVideoContainer"></div>
+    <div id="meetingSDKElement"></div>
+  </div>
 
-    <!-- Thumbnail bar for participant switching -->
-    <div id="thumbnailBar"></div>
+  <!-- Thumbnails strip -->
+  <div id="thumbnailBar" aria-hidden="false"></div>
 
-    <!-- Custom controls -->
-    <div id="customControls">
-        <button class="control-btn" onclick="showModal('chat')">Chat</button>
-        <button class="control-btn" onclick="showModal('share')">Share</button>
-        <button class="control-btn" onclick="showModal('participants')">People</button>
-        <button class="control-btn" onclick="showModal('settings')">Settings</button>
-        <button class="control-btn" onclick="leaveMeeting()">Leave</button>
-    </div>
+  <!-- Bottom modals - we will place zoom's panels inside .modal-body -->
+  <div id="chatModal" class="bottom-modal" aria-hidden="true">
+    <div class="modal-header"><div>Chat</div><div><button onclick="closeBottomModal('chat')" style="background:#2D8CFF;border:none;padding:6px 10px;border-radius:6px;color:#fff">Close</button></div></div>
+    <div id="chatModalBody" class="modal-body"></div>
+  </div>
 
-    <!-- Modals -->
-    <div id="chatModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-title">Chat</div>
-            <p>Chat functionality would appear here in a full implementation.</p>
-            <button class="modal-close" onclick="closeModal('chat')">Close</button>
-        </div>
-    </div>
+  <div id="participantsModal" class="bottom-modal" aria-hidden="true">
+    <div class="modal-header"><div>Participants</div><div><button onclick="closeBottomModal('participants')" style="background:#2D8CFF;border:none;padding:6px 10px;border-radius:6px;color:#fff">Close</button></div></div>
+    <div id="participantsModalBody" class="modal-body"></div>
+  </div>
 
-    <div id="shareModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-title">Screen Share</div>
-            <p>Screen sharing options would appear here.</p>
-            <button class="modal-close" onclick="closeModal('share')">Close</button>
-        </div>
-    </div>
+  <div id="settingsModal" class="bottom-modal" aria-hidden="true">
+    <div class="modal-header"><div>Settings</div><div><button onclick="closeBottomModal('settings')" style="background:#2D8CFF;border:none;padding:6px 10px;border-radius:6px;color:#fff">Close</button></div></div>
+    <div id="settingsModalBody" class="modal-body"></div>
+  </div>
 
-    <div id="participantsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-title">Participants</div>
-            <p>Participant list would appear here.</p>
-            <button class="modal-close" onclick="closeModal('participants')">Close</button>
-        </div>
-    </div>
+  <div id="shareModal" class="bottom-modal" aria-hidden="true">
+    <div class="modal-header"><div>Share</div><div><button onclick="closeBottomModal('share')" style="background:#2D8CFF;border:none;padding:6px 10px;border-radius:6px;color:#fff">Close</button></div></div>
+    <div id="shareModalBody" class="modal-body"></div>
+  </div>
 
-    <div id="settingsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-title">Settings</div>
-            <p>Meeting settings would appear here.</p>
-            <button class="modal-close" onclick="closeModal('settings')">Close</button>
-        </div>
-    </div>
+  <!-- PIP fallback placeholder (we will remove if thumbnails exist) -->
+  <div id="selfPIP" class="self-video-pip" style="display:none"></div>
 
-    <div id="loading">Joining meeting...</div>
+  <div id="loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;z-index:16000">Joining meeting...</div>
+  <div id="error" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;color:#fff;z-index:16001">
+    <div style="text-align:center"><h2>Unable to Join Meeting</h2><p id="errorMessage"></p><button onclick="retryJoin()" style="padding:10px 16px;border-radius:8px;border:none;background:#2D8CFF;color:#fff">Try again</button></div>
+  </div>
 
-    <div id="error">
-        <h2>Unable to Join Meeting</h2>
-        <p id="errorMessage"></p>
-        <button class="retry-btn" onclick="retryJoin()">Try Again</button>
-    </div>
+<script>
+/* ------------------------
+  Zoom Embedded + UI relocation + thumbnail logic
+   - Uses DOM heuristics for v3.12.0 structure you provided
+   - Moves SDK panels into bottom-modals while preserving functionality
+-------------------------*/
 
-    <script>
-        // URL params
-        const params = new URLSearchParams(window.location.search);
-        const meetingNumber = params.get("meetingNumber");
-        const signature = decodeURIComponent(params.get("signature") || "");
-        const sdkKey = params.get("sdkKey");
-        const userName = decodeURIComponent(params.get("name") || "Guest");
-        const password = decodeURIComponent(params.get("password") || "").trim();
+const params = new URLSearchParams(window.location.search);
+const meetingNumber = params.get("meetingNumber");
+const signature = decodeURIComponent(params.get("signature") || "");
+const sdkKey = params.get("sdkKey");
+const userName = decodeURIComponent(params.get("name") || "Guest");
+const password = decodeURIComponent(params.get("password") || "").trim();
 
-        let zoomClient = null;
-        let observer = null;
-        let layoutObserver = null;
-        let selfVideoPIP = null;
-        let isInitialized = false;
-        let layoutInterval = null;
-        let hasJoined = false;
-        let currentMainVideo = null;
-        let videoTiles = new Map();
+let zoomClient = null;
+let hasJoined = false;
+let isInitialized = false;
+let tileMap = new Map(); // id => {container,video,name,isSelf}
+let thumbnailHideTimer = null;
+let thumbnailsEnabled = true;
+let pipCreated = false;
 
-        // Debounce helpers
-        function debounce(fn, wait = 100) {
-            let t;
-            return (...args) => {
-                clearTimeout(t);
-                t = setTimeout(() => fn.apply(this, args), wait);
-            };
+/* ---------------------------
+  Utility: debounce
+---------------------------*/
+function debounce(fn, wait=80){
+  let t;
+  return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a), wait); };
+}
+
+/* ---------------------------
+  Layout enforcement
+---------------------------*/
+function fitToViewport(){
+  const sdkRoot = document.getElementById('meetingSDKElement');
+  const main = document.getElementById('mainVideoContainer');
+  document.documentElement.style.width = window.innerWidth + 'px';
+  document.documentElement.style.height = window.innerHeight + 'px';
+  document.body.style.width = window.innerWidth + 'px';
+  document.body.style.height = window.innerHeight + 'px';
+
+  if(sdkRoot){
+    sdkRoot.style.width = window.innerWidth + 'px';
+    sdkRoot.style.height = (window.innerHeight - 120) + 'px';
+  }
+  // Try to make internal wrappers fill
+  document.querySelectorAll('.meeting-client, .meeting-client-inner, .meeting-client-content').forEach(el=>{
+    try{ el.style.width = window.innerWidth + 'px'; el.style.height = (window.innerHeight - 120) + 'px'; }catch(e){}
+  });
+}
+const debouncedFit = debounce(fitToViewport, 80);
+window.addEventListener('resize', debouncedFit);
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ fitToViewport(); scanAndBuildTiles(); }, 500) });
+
+/* ---------------------------
+  Start Meeting with retry wrapper
+---------------------------*/
+async function startMeeting(){
+  try{
+    if(hasJoined) return;
+    if(!meetingNumber || !signature || !sdkKey) throw new Error('Missing meeting parameters');
+
+    const sdkRoot = document.getElementById('meetingSDKElement');
+
+    if(typeof window.ZoomMtgEmbedded === 'undefined') throw new Error('Zoom SDK not loaded');
+
+    fitToViewport();
+    zoomClient = window.ZoomMtgEmbedded.createClient();
+
+    await zoomClient.init({
+      zoomAppRoot: sdkRoot,
+      language: 'en-US',
+      patchJsMedia: true
+    });
+
+    zoomClient.on('connection-change', payload=>{
+      console.log('Connection change:', payload.state);
+      if(payload.state === 'Closed'){
+        hasJoined = false;
+        notifyAppAndClose();
+      } else if(payload.state === 'Connected'){
+        hasJoined = true;
+        document.getElementById('loading').style.display = 'none';
+      }
+    });
+
+    // join with retries for reliability
+    await joinWithRetries(3);
+
+    isInitialized = true;
+
+    // start observers & layout enforcement
+    startObservers();
+    scanAndBuildTiles(); // initial tiles
+    startThumbnailAutoHide(); // start inactivity timer
+  }catch(err){
+    console.error('startMeeting error', err);
+    showError(err.message || String(err));
+  }
+}
+
+async function joinWithRetries(max=3){
+  let attempt=0;
+  let lastErr=null;
+  while(attempt<max){
+    try{
+      attempt++;
+      console.log('Attempting join', attempt);
+      await zoomClient.join({
+        sdkKey, signature, meetingNumber, password, userName
+      });
+      console.log('Join OK');
+      hasJoined = true;
+      document.getElementById('loading').style.display = 'none';
+      return;
+    }catch(e){
+      lastErr=e;
+      console.warn('Join attempt failed', attempt, e);
+      // small wait then retry
+      await new Promise(r=>setTimeout(r, 1200));
+    }
+  }
+  throw lastErr || new Error('Failed to join');
+}
+
+/* ---------------------------
+  Modal / Panel relocation utilities
+   - When a Zoom toolbar button is pressed, locate the panel (dialog/drawer)
+     that the SDK created and move it into our bottom-modal .modal-body.
+   - If the panel hasn't appeared yet, we trigger the button's native click
+     and observe mutations to find the panel.
+---------------------------*/
+
+function openBottomModal(kind){
+  const modal = document.getElementById(kind + 'Modal');
+  if(!modal) return;
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden','false');
+}
+
+function closeBottomModal(kind){
+  const modal = document.getElementById(kind + 'Modal');
+  const body = document.getElementById(kind + 'ModalBody');
+  if(modal && body){
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden','true');
+
+    // If we moved a Zoom panel into body, we leave it there — we don't destroy it.
+    // Zoom will still update it. If Zoom expects to close that panel, we listen for
+    // DOM removals and will react accordingly.
+  }
+}
+
+// heuristic to find panel by likely keywords/classnames/role
+function findZoomPanel(kind){
+  const root = document.getElementById('meetingSDKElement');
+  if(!root) return null;
+
+  // candidates: elements with role dialog, or with class names that mention chat/participant/settings/share
+  const keyword = kind.toLowerCase();
+  const candidates = root.querySelectorAll('[role="dialog"], [role="menu"], [class*="chat"], [class*="Chat"], [class*="participants"], [class*="participant"], [class*="setting"], [class*="share"], [class*="panel"], [class*="drawer"]');
+
+  for(const c of candidates){
+    try{
+      const text = (c.innerText || '').toLowerCase();
+      const cls = (c.className || '').toLowerCase();
+      if(cls.includes(keyword) || text.includes(keyword) || c.getAttribute('aria-label')?.toLowerCase()?.includes(keyword)){
+        return c;
+      }
+    }catch(e){}
+  }
+  // fallback: any visible dialog
+  for(const c of candidates){
+    try{
+      const bbox = c.getBoundingClientRect();
+      if(bbox.width>10 && bbox.height>10) return c;
+    }catch(e){}
+  }
+  return null;
+}
+
+// move an element into modal body for given kind
+function movePanelIntoModal(kind, panelElement){
+  const body = document.getElementById(kind + 'ModalBody');
+  if(!body || !panelElement) return;
+  // hide any headers created by Zoom which may duplicate; keep the core
+  // Append the panel inside the modal body. Keep original semantics.
+  try{
+    body.appendChild(panelElement);
+    openBottomModal(kind);
+  }catch(e){
+    console.warn('movePanelIntoModal error', e);
+  }
+}
+
+// click interception: wrap toolbar buttons to show panels in modal
+function interceptToolbarButtons(){
+  const sdkRoot = document.getElementById('meetingSDKElement');
+  if(!sdkRoot) return;
+
+  // toolbar elements have aria-labels like "Chat", "Participants", "Share Screen", "Settings", "Leave".
+  // We'll add a delegated click listener: when a click happens on a toolbar button, we handle it.
+  sdkRoot.addEventListener('click', async (ev)=>{
+    try{
+      const btn = ev.target.closest('button');
+      if(!btn) return;
+      const aria = (btn.getAttribute && btn.getAttribute('aria-label')) || '';
+      const title = (btn.title || '').toLowerCase();
+
+      // Normalize
+      const label = String(aria || title || '').toLowerCase();
+
+      // For leave: let the button act normally (do not intercept), but we ensure ReactNative is notified by SDK events.
+      if(label.includes('leave')) {
+        return; // do not intercept leave
+      }
+
+      // For chat
+      if(label.includes('chat')){
+        ev.preventDefault(); ev.stopPropagation();
+        // Try to find panel
+        let panel = findZoomPanel('chat');
+        if(panel){
+          movePanelIntoModal('chat', panel); return;
         }
+        // trigger native click (Zoom will create/attach panel)
+        btn.click();
+        // observe and move panel when it appears
+        await waitForPanelAndMove('chat', 2200);
+        return;
+      }
 
-        // Modal functions
-        function showModal(type) {
-            document.getElementById(`${type}Modal`).style.display = 'flex';
+      if(label.includes('participant') || label.includes('participants') || label.includes('people')){
+        ev.preventDefault(); ev.stopPropagation();
+        let panel = findZoomPanel('participants');
+        if(panel){ movePanelIntoModal('participants', panel); return; }
+        btn.click();
+        await waitForPanelAndMove('participants', 2200);
+        return;
+      }
+
+      if(label.includes('share') || label.includes('screen share') || label.includes('share screen')){
+        ev.preventDefault(); ev.stopPropagation();
+        let panel = findZoomPanel('share');
+        if(panel){ movePanelIntoModal('share', panel); return; }
+        btn.click();
+        await waitForPanelAndMove('share', 2200);
+        return;
+      }
+
+      if(label.includes('setting') || label.includes('settings') || label.includes('video setting')){
+        ev.preventDefault(); ev.stopPropagation();
+        let panel = findZoomPanel('settings');
+        if(panel){ movePanelIntoModal('settings', panel); return; }
+        btn.click();
+        await waitForPanelAndMove('settings', 2200);
+        return;
+      }
+
+      // other toolbar buttons — let them behave normally (reactions, captions) but try to ensure their UI fits
+    }catch(e){
+      /* swallow */
+    }
+  }, true);
+}
+
+// Wait for a panel that matches kind to appear and then move it to modal. timeout ms
+function waitForPanelAndMove(kind, timeout=3000){
+  return new Promise((resolve)=>{
+    const root = document.getElementById('meetingSDKElement');
+    if(!root) return resolve();
+    let done=false;
+    const mo = new MutationObserver((muts)=>{
+      if(done) return;
+      const panel = findZoomPanel(kind);
+      if(panel){
+        done=true;
+        try{ movePanelIntoModal(kind, panel); }catch(e){}
+        mo.disconnect();
+        resolve();
+      }
+    });
+    mo.observe(root, {childList:true, subtree:true});
+    // final timeout fallback
+    setTimeout(()=>{ if(!done){ mo.disconnect(); resolve(); } }, timeout);
+  });
+}
+
+/* ---------------------------
+  Tiles & thumbnails logic
+   - Scans the SDK DOM to find participant tiles (li.zoom-MuiListItem-root) or video canvas/video elements
+   - Builds thumbnail bar; first thumbnail is always self (if found)
+   - Clicking thumbnail makes that tile visible in mainVideoContainer (we move the tile element into main view by CSS only)
+---------------------------*/
+
+function scanAndBuildTiles(){
+  if(!isInitialized && !hasJoined) return;
+  const sdkRoot = document.getElementById('meetingSDKElement');
+  if(!sdkRoot) return;
+
+  // Find gallery list tiles (li.zoom-MuiListItem-root)
+  const tileEls = Array.from(sdkRoot.querySelectorAll('li.zoom-MuiListItem-root, [class*="video-container"], [class*="videoBox"], [class*="video-item"], .css-vv0cdr > li'));
+  // Also consider the video canvas region (canvas#zoom-sdk-video-canvas)
+  const canvas = sdkRoot.querySelector('#zoom-sdk-video-canvas');
+
+  // Reset tileMap — we will repopulate gracefully to avoid duplicates
+  tileMap.clear();
+
+  const discovered = [];
+  tileEls.forEach((container, idx)=>{
+    try{
+      // find inner video (if exists)
+      const video = container.querySelector('video') || container.querySelector('canvas') || null;
+      // extract name
+      const name = extractNameFromTile(container) || `Participant ${idx+1}`;
+      const id = 'tile-' + idx;
+      const isSelf = (String(name).toLowerCase().includes(userName.toLowerCase())) || !!container.querySelector('[id*="SELF"], #ZOOM_WEB_SDK_SELF_VIDEO');
+
+      tileMap.set(id, {container, video, name, isSelf});
+      discovered.push({id, container, video, name, isSelf});
+    }catch(e){}
+  });
+
+  // If no tiles found, fallback: try to find video elements directly in SDK root
+  if(tileMap.size === 0){
+    const videos = Array.from(sdkRoot.querySelectorAll('video'));
+    videos.forEach((v, i)=>{
+      const container = v.closest('[class*="video-container"], li.zoom-MuiListItem-root') || v.parentElement;
+      const name = extractNameFromTile(container) || `Participant ${i+1}`;
+      const id = 'tile-fallback-' + i;
+      const isSelf = v.id === 'ZOOM_WEB_SDK_SELF_VIDEO' || (name && name.toLowerCase().includes(userName.toLowerCase()));
+      tileMap.set(id, {container, video:v, name, isSelf});
+    });
+  }
+
+  // Build the thumbnail bar using the tileMap
+  buildThumbnailStrip();
+  // After thumbnails exist, remove the pip and ensure self is first in the thumbnails
+  if(document.getElementById('thumbnailBar').children.length > 0){
+    removePIPIfExists();
+    thumbnailsEnabled = true;
+  } else {
+    // thumbnails failed — create stacked view fallback
+    createStackedFallbackView();
+    thumbnailsEnabled = false;
+  }
+}
+
+function extractNameFromTile(container){
+  if(!container) return null;
+  // look for name elements using a few heuristics
+  const nameEl = container.querySelector('[class*="name"], [class*="user-name"], [class*="participant-name"], .zoom-MuiTypography-noWrap, .css-75vwmk, .css-1pftrv5');
+  if(nameEl) return (nameEl.innerText || nameEl.textContent || '').trim();
+  // some tiles have <p> with name
+  const p = container.querySelector('p');
+  if(p) return (p.innerText || p.textContent || '').trim();
+  return null;
+}
+
+function buildThumbnailStrip(){
+  const strip = document.getElementById('thumbnailBar');
+  if(!strip) return;
+  strip.innerHTML = '';
+
+  // ensure self is first
+  const entries = Array.from(tileMap.entries()).map(([id, val])=>({id, ...val}));
+  // find self
+  const selfIndex = entries.findIndex(e => e.isSelf);
+  let ordered = entries;
+  if(selfIndex > -1){
+    const selfEntry = ordered.splice(selfIndex, 1)[0];
+    ordered.unshift(selfEntry);
+  }
+
+  ordered.forEach(entry => {
+    const thumb = document.createElement('div');
+    thumb.className = 'thumbnail';
+    thumb.id = 'thumb-' + entry.id;
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'thumb-name';
+    nameDiv.innerText = entry.name || (entry.isSelf ? (userName || 'Me') : 'Participant');
+
+    // try to create a small video inside the thumbnail by attaching srcObject if available
+    if(entry.video){
+      const v = document.createElement('video');
+      v.muted = true;
+      v.playsInline = true;
+      v.autoplay = true;
+      v.style.width = '100%';
+      v.style.height = '100%';
+      v.style.objectFit = 'cover';
+
+      try{
+        // prefer sharing the actual srcObject reference
+        if(entry.video.srcObject){
+          v.srcObject = entry.video.srcObject;
+        } else if(entry.video.captureStream){
+          try{ v.srcObject = entry.video.captureStream(); }catch(e){}
+        } else if(entry.video.currentSrc){
+          v.src = entry.video.currentSrc;
         }
+      }catch(e){ /* ignore */ }
 
-        function closeModal(type) {
-            document.getElementById(`${type}Modal`).style.display = 'none';
+      thumb.appendChild(v);
+    } else {
+      // fallback placeholder
+      const ph = document.createElement('div');
+      ph.style.width='100%';ph.style.height='100%';ph.style.background='#111';
+      thumb.appendChild(ph);
+    }
+
+    thumb.appendChild(nameDiv);
+
+    thumb.onclick = (ev)=>{
+      ev.stopPropagation();
+      switchToMain(entry.id);
+      // show thumbnail bar as user is active
+      showThumbnailsTemporarily();
+    };
+
+    strip.appendChild(thumb);
+  });
+
+  // quick focus on first thumbnail (self)
+  if(strip.children.length>0){
+    strip.children[0].classList.add('active');
+    // show main view with first tile
+    const firstId = ordered[0] && ordered[0].id;
+    if(firstId) switchToMain(firstId);
+  }
+}
+
+/* switch selected tile to main view */
+function switchToMain(tileId){
+  const entry = tileMap.get(tileId) || Array.from(tileMap.values()).find(e => e && e.container && e.container.id && ('tile-'+e.container.id) === tileId);
+  if(!entry) return;
+
+  // Clear active styles
+  document.querySelectorAll('.thumbnail').forEach(t=>t.classList.remove('active'));
+  const thumb = document.getElementById('thumb-' + tileId);
+  if(thumb) thumb.classList.add('active');
+
+  // Show the entry.container as the main visible tile. We avoid moving DOM nodes when possible:
+  // We'll attempt to make the selected tile's container fill the main container using CSS.
+  const main = document.getElementById('mainVideoContainer');
+
+  // Clear any previous main content (but keep the SDK DOM intact)
+  main.innerHTML = '';
+
+  // Strategy: clone the tile container visually into the main container via cloneNode(true) to avoid messing with SDK references.
+  // However we prefer to attach the actual video srcObject to a new video element in main for reliable rendering.
+  try{
+    const newWrapper = document.createElement('div');
+    newWrapper.style.width = '100%';
+    newWrapper.style.height = '100%';
+    newWrapper.style.display = 'flex';
+    newWrapper.style.alignItems = 'center';
+    newWrapper.style.justifyContent = 'center';
+    newWrapper.style.position = 'relative';
+    newWrapper.className = 'main-selected-wrapper';
+
+    // If original has a video, attach it
+    if(entry.video){
+      const mainVid = document.createElement('video');
+      mainVid.autoplay = true;
+      mainVid.playsInline = true;
+      mainVid.muted = false;
+      mainVid.controls = false;
+      mainVid.style.width = '100%';
+      mainVid.style.height = '100%';
+      mainVid.style.objectFit = 'contain';
+      try{
+        if(entry.video.srcObject) mainVid.srcObject = entry.video.srcObject;
+        else if(entry.video.captureStream) mainVid.srcObject = entry.video.captureStream();
+        else if(entry.video.currentSrc) mainVid.src = entry.video.currentSrc;
+      }catch(e){ console.warn('attach main video error', e); }
+      newWrapper.appendChild(mainVid);
+    }else{
+      // fallback: try to clone a canvas (gallery canvas)
+      const galleryCanvas = document.getElementById('zoom-sdk-video-canvas') || entry.container.querySelector('canvas');
+      if(galleryCanvas){
+        const cloned = document.createElement('div');
+        cloned.style.width='100%';cloned.style.height='100%';
+        cloned.appendChild(galleryCanvas.cloneNode(true));
+        newWrapper.appendChild(cloned);
+      } else {
+        newWrapper.appendChild(document.createElement('div'));
+      }
+    }
+
+    // label name overlay
+    const nameOverlay = document.createElement('div');
+    nameOverlay.style.position='absolute';nameOverlay.style.left='12px';nameOverlay.style.bottom='12px';nameOverlay.style.padding='6px 8px';nameOverlay.style.background='rgba(0,0,0,0.4)';nameOverlay.style.color='#fff';nameOverlay.style.borderRadius='6px';
+    nameOverlay.innerText = entry.name || (entry.isSelf ? (userName || 'Me') : 'Participant');
+    newWrapper.appendChild(nameOverlay);
+
+    main.appendChild(newWrapper);
+  }catch(e){
+    console.warn('switchToMain error', e);
+  }
+}
+
+/* ---------------------------
+  Thumbnail auto-hide logic
+---------------------------*/
+function startThumbnailAutoHide(){
+  resetThumbnailHideTimer();
+  ['mousemove','touchstart','touchend','scroll','click'].forEach(evt=>{
+    window.addEventListener(evt, showThumbnailsTemporarily, {passive:true});
+  });
+}
+
+function resetThumbnailHideTimer(){
+  clearTimeout(thumbnailHideTimer);
+  thumbnailHideTimer = setTimeout(()=>{
+    const tb = document.getElementById('thumbnailBar');
+    if(tb) tb.classList.add('hidden');
+  }, 30_000); // 30 seconds
+}
+
+function showThumbnailsTemporarily(){
+  const tb = document.getElementById('thumbnailBar');
+  if(!tb) return;
+  tb.classList.remove('hidden');
+  resetThumbnailHideTimer();
+}
+
+/* ---------------------------
+  PIP fallback functions
+---------------------------*/
+function createPIPIfNeeded(){
+  if(thumbnailsEnabled) return; // thumbnails exist, we don't need PIP
+  const pip = document.getElementById('selfPIP');
+  pip.style.display = 'block';
+  pipCreated = true;
+
+  // find self video element
+  const selfVideo = document.getElementById('ZOOM_WEB_SDK_SELF_VIDEO') || document.querySelector('video[id*="SELF"], video.css-brs79n');
+  if(selfVideo){
+    // attach to pip
+    const pipBody = document.getElementById('selfPIP');
+    pipBody.innerHTML = '';
+    const v = document.createElement('video');
+    v.autoplay=true; v.muted=true; v.playsInline=true; v.style.width='100%'; v.style.height='100%'; v.style.objectFit='cover';
+    try{ if(selfVideo.srcObject) v.srcObject = selfVideo.srcObject; else if(selfVideo.captureStream) v.srcObject = selfVideo.captureStream(); else if(selfVideo.currentSrc) v.src = selfVideo.currentSrc; }catch(e){}
+    pipBody.appendChild(v);
+  }
+}
+
+function removePIPIfExists(){
+  try{
+    const pip = document.getElementById('selfPIP');
+    if(pip){ pip.style.display = 'none'; pip.innerHTML = ''; pipCreated = false; }
+  }catch(e){}
+}
+
+/* ---------------------------
+  Stacked fallback view when thumbnail building fails
+---------------------------*/
+function createStackedFallbackView(){
+  // fallback: show stacked tiles inside main container
+  const main = document.getElementById('mainVideoContainer');
+  main.innerHTML = '';
+  const container = document.createElement('div');
+  container.className = 'stacked-tiles';
+  tileMap.forEach((val,id)=>{
+    const tileWrap = document.createElement('div');
+    tileWrap.className = 'stacked-tile';
+    const title = document.createElement('div');
+    title.style.color='#fff'; title.style.marginBottom='6px'; title.innerText = val.name || 'Participant';
+
+    tileWrap.appendChild(title);
+    // attach video snapshot if possible
+    if(val.video){
+      const v = document.createElement('video'); v.autoplay=true; v.playsInline=true; v.muted=true; v.style.width='100%'; v.style.height='140px'; v.style.objectFit='cover';
+      try{ if(val.video.srcObject) v.srcObject = val.video.srcObject; else if(val.video.captureStream) v.srcObject = val.video.captureStream(); }catch(e){}
+      tileWrap.appendChild(v);
+    }
+    container.appendChild(tileWrap);
+  });
+  main.appendChild(container);
+  // create pip if needed
+  createPIPIfNeeded();
+}
+
+/* ---------------------------
+  Observers: watch for tile / toolbar / panel DOM changes
+---------------------------*/
+let sdkObserver = null;
+function startObservers(){
+  const sdkRoot = document.getElementById('meetingSDKElement');
+  if(!sdkRoot) return;
+
+  // Ensure toolbar reflow styling for toolbars (we apply css class)
+  const styleToolbars = ()=> {
+    const toolbarCandidates = sdkRoot.querySelectorAll('[class*="toolbar"], [class*="footer"], [class*="control-bar"], [class*="video-operations"], [class*="zoom-MuiBox-root"]');
+    toolbarCandidates.forEach(t=>{
+      try{
+        // Heuristic: toolbar elements often have button children and are near bottom
+        if(t.querySelector && t.querySelector('button')){
+          t.classList.add('zoom-toolbar-flex');
+          // make sure pointer events enabled
+          t.style.pointerEvents = 'auto';
         }
-
-        function leaveMeeting() {
-            if (zoomClient) {
-                zoomClient.leave();
-            } else {
-                notifyAppAndClose();
-            }
-        }
-
-        // Force full-screen sizing
-        function maintainFullScreen() {
-            document.documentElement.style.width = window.innerWidth + 'px';
-            document.documentElement.style.height = window.innerHeight + 'px';
-            document.body.style.width = window.innerWidth + 'px';
-            document.body.style.height = window.innerHeight + 'px';
-
-            const meetingContainer = document.getElementById('meetingContainer');
-            const meetingElement = document.getElementById('meetingSDKElement');
-
-            if (meetingContainer) {
-                meetingContainer.style.width = window.innerWidth + 'px';
-                meetingContainer.style.height = window.innerHeight + 'px';
-            }
-            if (meetingElement) {
-                meetingElement.style.width = window.innerWidth + 'px';
-                meetingElement.style.height = 'calc(100vh - 80px)';
-            }
-
-            // Force Zoom top-level children to full-screen
-            const zoomChildren = document.querySelectorAll('#meetingSDKElement > div');
-            zoomChildren.forEach(div => {
-                div.style.width = window.innerWidth + 'px';
-                div.style.height = 'calc(100vh - 80px)';
-                div.style.position = 'fixed';
-                div.style.top = '0';
-                div.style.left = '0';
-            });
-
-            updatePIPSize();
-        }
-        const debouncedMaintainFullScreen = debounce(maintainFullScreen, 80);
-
-        // Enforce layout repeatedly and on DOM changes
-        function startLayoutEnforcement() {
-            if (layoutInterval) clearInterval(layoutInterval);
-            layoutInterval = setInterval(maintainFullScreen, 1000);
-
-            if (layoutObserver) layoutObserver.disconnect();
-            layoutObserver = new MutationObserver(debouncedMaintainFullScreen);
-            layoutObserver.observe(document.body, { childList: true, subtree: true });
-        }
-
-        // Find all video tiles and manage them
-        function manageVideoTiles() {
-            if (!isInitialized || !hasJoined) return;
-            const meetingEl = document.getElementById('meetingSDKElement');
-            if (!meetingEl) return;
-
-            const videoContainers = meetingEl.querySelectorAll('[class*="video-container"], [class*="video-item"], [class*="videoBox"]');
-            
-            videoContainers.forEach((container, index) => {
-                try {
-                    const video = container.querySelector('video');
-                    if (!video) return;
-
-                    const participantName = extractParticipantName(container) || `Participant ${index + 1}`;
-                    const tileId = `tile-${index}`;
-
-                    if (!videoTiles.has(tileId)) {
-                        // New tile found
-                        videoTiles.set(tileId, {
-                            container,
-                            video,
-                            name: participantName,
-                            isSelf: participantName.includes(userName) || container.querySelector('[class*="self"]')
-                        });
-
-                        // Add fullscreen button
-                        addFullscreenButton(container, tileId);
-
-                        // Create thumbnail
-                        createThumbnail(tileId, container, participantName);
-                    }
-
-                    // Update video source for thumbnail if needed
-                    updateThumbnailVideo(tileId, video);
-                } catch (e) {
-                    console.warn('Error processing video tile:', e);
-                }
-            });
-
-            // Set first tile as main if none selected
-            if (!currentMainVideo && videoTiles.size > 0) {
-                const firstTile = Array.from(videoTiles.keys())[0];
-                switchToMainView(firstTile);
-            }
-
-            // Handle self video PIP
-            createOrUpdateSelfPIP();
-        }
-
-        function extractParticipantName(container) {
-            // Try to find participant name in various Zoom UI locations
-            const nameElements = container.querySelectorAll('[class*="name"], [class*="user-name"], [class*="participant-name"]');
-            for (let el of nameElements) {
-                const text = el.textContent || el.innerText;
-                if (text && text.trim()) return text.trim();
-            }
-            return null;
-        }
-
-        function createThumbnail(tileId, container, name) {
-            const thumbnailBar = document.getElementById('thumbnailBar');
-            if (!thumbnailBar) return;
-
-            // Check if thumbnail already exists
-            if (document.getElementById(`thumb-${tileId}`)) return;
-
-            const thumb = document.createElement('div');
-            thumb.id = `thumb-${tileId}`;
-            thumb.className = 'thumbnail';
-            thumb.innerHTML = `<div class="thumbnail-name">${name}</div>`;
-            
-            thumb.onclick = () => switchToMainView(tileId);
-            
-            thumbnailBar.appendChild(thumb);
-        }
-
-        function updateThumbnailVideo(tileId, sourceVideo) {
-            const thumb = document.getElementById(`thumb-${tileId}`);
-            if (!thumb) return;
-
-            // Remove existing video if any
-            const existingVideo = thumb.querySelector('video');
-            if (existingVideo) return;
-
-            // Create new video element for thumbnail
-            const video = document.createElement('video');
-            video.muted = true;
-            video.playsInline = true;
-            video.style.width = '100%';
-            video.style.height = '100%';
-            video.style.objectFit = 'cover';
-
-            // Copy srcObject from source video
-            if (sourceVideo.srcObject) {
-                video.srcObject = sourceVideo.srcObject;
-            }
-
-            thumb.appendChild(video);
-        }
-
-        function switchToMainView(tileId) {
-            const tile = videoTiles.get(tileId);
-            if (!tile) return;
-
-            // Update active state
-            document.querySelectorAll('.thumbnail').forEach(thumb => {
-                thumb.classList.remove('active');
-            });
-            const thumb = document.getElementById(`thumb-${tileId}`);
-            if (thumb) thumb.classList.add('active');
-
-            currentMainVideo = tileId;
-
-            // Hide all tiles initially
-            videoTiles.forEach((tileData, id) => {
-                tileData.container.style.display = 'none';
-            });
-
-            // Show the selected tile
-            tile.container.style.display = 'block';
-            tile.container.classList.add('tile-fullscreen');
-
-            // Ensure fullscreen button is visible
-            addFullscreenButton(tile.container, tileId);
-        }
-
-        function addFullscreenButton(container, tileId) {
-            // Remove existing button if any
-            const existingBtn = container.querySelector('.tile-fullscreen-btn');
-            if (existingBtn) return;
-
-            const btn = document.createElement('button');
-            btn.className = 'tile-fullscreen-btn';
-            btn.innerText = '⤢';
-            
-            btn.onclick = (ev) => {
-                ev.stopPropagation();
-                const isFullscreen = container.classList.contains('tile-fullscreen');
-                
-                if (isFullscreen) {
-                    container.classList.remove('tile-fullscreen');
-                    // Show thumbnail bar
-                    document.getElementById('thumbnailBar').style.display = 'flex';
-                } else {
-                    container.classList.add('tile-fullscreen');
-                    // Hide thumbnail bar when in fullscreen
-                    document.getElementById('thumbnailBar').style.display = 'none';
-                }
-            };
-
-            if (getComputedStyle(container).position === 'static') {
-                container.style.position = 'relative';
-            }
-            container.appendChild(btn);
-        }
-
-        // Self video PIP functions
-        function findLocalVideo() {
-            const meetingEl = document.getElementById('meetingSDKElement');
-            if (!meetingEl) return null;
-
-            const videoEls = meetingEl.querySelectorAll('video');
-            for (let video of videoEls) {
-                try {
-                    const container = video.closest('[class*="video-container"], [class*="video-item"], [class*="videoBox"]');
-                    const text = container ? (container.innerText || '') : '';
-                    if (text.includes(userName)) {
-                        return video;
-                    }
-                } catch(e) {}
-            }
-            return videoEls[0] || null;
-        }
-
-        function createOrUpdateSelfPIP() {
-            if (!isInitialized || !hasJoined) return;
-            
-            const localVid = findLocalVideo();
-            if (!localVid) return;
-
-            // Create PIP if not exists
-            if (!selfVideoPIP) {
-                selfVideoPIP = document.createElement('div');
-                selfVideoPIP.className = 'self-video-pip';
-                const pipVideo = document.createElement('video');
-                pipVideo.autoplay = true;
-                pipVideo.muted = true;
-                pipVideo.playsInline = true;
-
-                if (localVid.srcObject) {
-                    pipVideo.srcObject = localVid.srcObject;
-                }
-
-                selfVideoPIP.appendChild(pipVideo);
-                document.body.appendChild(selfVideoPIP);
-            }
-        }
-
-        function updatePIPSize() {
-            if (!selfVideoPIP) return;
-            if (window.innerHeight > window.innerWidth) {
-                selfVideoPIP.style.width = '120px';
-                selfVideoPIP.style.height = '160px';
-            } else {
-                selfVideoPIP.style.width = '160px';
-                selfVideoPIP.style.height = '120px';
-            }
-        }
-
-        // Observes for new tiles and updates layout
-        function observeAndManageTiles() {
-            const meetingEl = document.getElementById('meetingSDKElement');
-            if (!meetingEl) return;
-
-            // Initial management
-            manageVideoTiles();
-
-            // Observe for changes
-            const tileObserver = new MutationObserver(debounce(() => {
-                manageVideoTiles();
-            }, 500));
-            tileObserver.observe(meetingEl, { childList: true, subtree: true });
-        }
-
-        async function startMeeting() {
-            try {
-                if (hasJoined) return;
-
-                if (!meetingNumber || !signature || !sdkKey) {
-                    throw new Error('Missing meeting parameters');
-                }
-
-                if (typeof window.ZoomMtgEmbedded === 'undefined') {
-                    throw new Error('Zoom SDK not loaded');
-                }
-
-                console.log('Starting Zoom meeting...');
-                maintainFullScreen();
-
-                zoomClient = window.ZoomMtgEmbedded.createClient();
-
-                await zoomClient.init({
-                    zoomAppRoot: document.getElementById('meetingSDKElement'),
-                    language: 'en-US',
-                    patchJsMedia: true
-                });
-
-                zoomClient.on('connection-change', (payload) => {
-                    console.log('Connection change:', payload.state);
-                    if (payload.state === 'Closed') {
-                        hasJoined = false;
-                        notifyAppAndClose();
-                    } else if (payload.state === 'Connected') {
-                        hasJoined = true;
-                    }
-                });
-
-                console.log('Attempting to join meeting...');
-                await zoomClient.join({
-                    sdkKey: sdkKey,
-                    signature: signature,
-                    meetingNumber: meetingNumber,
-                    password: password,
-                    userName: userName
-                });
-
-                console.log('✅ Successfully joined meeting');
-                hasJoined = true;
-                document.getElementById('loading').style.display = 'none';
-
-                // Start enforcement and observers
-                startLayoutEnforcement();
-                observeAndManageTiles();
-
-                // Periodic tile management
-                setInterval(manageVideoTiles, 2000);
-
-                isInitialized = true;
-            } catch (error) {
-                console.error('Meeting start error:', error);
-                showError(getErrorMessage(error));
-            }
-        }
-
-        function getErrorMessage(error) {
-            try {
-                if (error && typeof error === 'object') {
-                    if (error.type === 'INVALID_OPERATION' && error.reason === 'Duplicated join operation') {
-                        return 'Meeting join already in progress.';
-                    } else if (error.type === 'JOIN_MEETING_FAILED') {
-                        return 'Failed to join meeting. Please check the meeting credentials.';
-                    } else if (error.message) {
-                        return error.message;
-                    }
-                }
-                return String(error || 'Unable to join meeting.');
-            } catch (e) {
-                return 'Unable to join meeting.';
-            }
-        }
-
-        function showError(message) {
-            document.getElementById('loading').style.display = 'none';
-            const err = document.getElementById('error');
-            err.style.display = 'flex';
-            document.getElementById('errorMessage').textContent = message;
-        }
-
-        function retryJoin() {
-            const err = document.getElementById('error');
-            err.style.display = 'none';
-            document.getElementById('loading').style.display = 'flex';
-
-            // Cleanup
-            if (observer) observer.disconnect();
-            if (layoutObserver) layoutObserver.disconnect();
-            if (layoutInterval) clearInterval(layoutInterval);
-            if (selfVideoPIP) {
-                try { selfVideoPIP.remove(); } catch(e) {}
-                selfVideoPIP = null;
-            }
-
-            // Clear tiles and thumbnails
-            videoTiles.clear();
-            document.getElementById('thumbnailBar').innerHTML = '';
-            currentMainVideo = null;
-
-            isInitialized = false;
-            hasJoined = false;
-            setTimeout(startMeeting, 800);
-        }
-
-        function notifyAppAndClose() {
-            try { if (observer) observer.disconnect(); } catch(e) {}
-            try { if (layoutObserver) layoutObserver.disconnect(); } catch(e) {}
-            try { if (layoutInterval) clearInterval(layoutInterval); } catch(e) {}
-            try { if (selfVideoPIP) selfVideoPIP.remove(); } catch(e) {}
-
-            isInitialized = false;
-            hasJoined = false;
-
-            if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'meetingEnded' }));
-            } else {
-                setTimeout(() => alert('Meeting ended. You can close this window.'), 500);
-            }
-        }
-
-        // Event listeners
-        window.addEventListener('DOMContentLoaded', startMeeting);
-        window.addEventListener('resize', debouncedMaintainFullScreen);
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => {
-                maintainFullScreen();
-                updatePIPSize();
-                manageVideoTiles();
-            }, 600);
-        });
-
-        window.addEventListener('error', (ev) => {
-            console.error('Global error:', ev.error || ev);
-        });
-    </script>
+      }catch(e){}
+    });
+  };
+
+  // build tiles on mutations
+  if(sdkObserver) sdkObserver.disconnect();
+  sdkObserver = new MutationObserver(debounce((mutations)=>{
+    try{
+      styleToolbars();
+      scanAndBuildTiles();
+      interceptToolbarButtons(); // ensure interception is attached
+    }catch(e){}
+  }, 200));
+  sdkObserver.observe(sdkRoot, {childList:true, subtree:true, attributes:false});
+
+  // run initial styleToolbars now
+  styleToolbars();
+  interceptToolbarButtons();
+}
+
+/* ---------------------------
+  Leave / Notify logic
+---------------------------*/
+function notifyAppAndClose(){
+  // Clean up observers and notify ReactNative
+  try{ if(sdkObserver) sdkObserver.disconnect(); }catch(e){}
+  try{ if(thumbnailHideTimer) clearTimeout(thumbnailHideTimer); }catch(e){}
+  if(window.ReactNativeWebView){
+    window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'meetingEnded' }));
+  } else {
+    setTimeout(()=>alert('Meeting ended. You can close this window.'), 400);
+  }
+}
+
+/* ---------------------------
+  Error / retry UI
+---------------------------*/
+function showError(msg){
+  const e = document.getElementById('error');
+  if(e){ e.style.display='flex'; document.getElementById('errorMessage').innerText = msg || 'Unable to join meeting'; }
+  document.getElementById('loading').style.display = 'none';
+}
+
+function retryJoin(){
+  // Clean UI and try again
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('loading').style.display = 'flex';
+  // reset state
+  tileMap.clear();
+  document.getElementById('thumbnailBar').innerHTML = '';
+  document.getElementById('mainVideoContainer').innerHTML = '';
+  isInitialized=false; hasJoined=false;
+  setTimeout(()=>startMeeting(), 700);
+}
+
+/* ---------------------------
+  Wire SDK events to ReactNative for leave/ended
+---------------------------*/
+function wireSDKEvents(){
+  if(!zoomClient) return;
+  zoomClient.on && zoomClient.on('connection-change', (payload)=>{
+    if(payload && payload.state === 'Closed'){
+      notifyAppAndClose();
+    }
+  });
+}
+
+/* ---------------------------
+  Initialize
+---------------------------*/
+window.addEventListener('DOMContentLoaded', ()=>{
+  // Start meeting
+  startMeeting().then(()=>{ wireSDKEvents(); }).catch(err=>{ console.warn('startMeeting err', err) });
+});
+
+</script>
 </body>
 </html>
