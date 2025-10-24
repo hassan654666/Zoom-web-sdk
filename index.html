@@ -220,6 +220,19 @@ async function startMeeting(){
     // join with retries for reliability
     await joinWithRetries(3);
 
+    // console.log('Attempting join', attempt);
+    //   await zoomClient.join({
+    //     sdkKey: sdkKey, 
+    //     signature: signature, 
+    //     meetingNumber: meetingNumber, 
+    //     password: password, 
+    //     userName: userName
+    //   });
+    //   console.log('Join OK');
+    //   hasJoined = true;
+    //   document.getElementById('loading').style.display = 'none';
+    //   return;
+
     isInitialized = true;
 
     // start observers & layout enforcement
@@ -240,7 +253,11 @@ async function joinWithRetries(max=3){
       attempt++;
       console.log('Attempting join', attempt);
       await zoomClient.join({
-        sdkKey, signature, meetingNumber, password, userName
+        sdkKey: sdkKey, 
+        signature: signature, 
+        meetingNumber: meetingNumber, 
+        password: password, 
+        userName: userName
       });
       console.log('Join OK');
       hasJoined = true;
