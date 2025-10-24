@@ -51,7 +51,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 0; /* Important for flex children */
+      min-height: 0;
+      overflow: hidden;
     }
 
     /* --- SDK container --- */
@@ -64,12 +65,7 @@
       overflow: hidden;
       -webkit-user-select: none;
       user-select: none;
-      pointer-events: none; /* Let our custom UI handle interactions */
       z-index: 1;
-    }
-
-    #meetingSDKElement > * {
-      pointer-events: auto; /* But allow SDK content to be interactive */
     }
 
     /* --- Thumbnail bar --- */
@@ -89,11 +85,11 @@
       z-index: 100;
       transition: opacity 0.3s ease, transform 0.3s ease;
       -webkit-overflow-scrolling: touch;
-      scrollbar-width: none; /* Firefox */
+      scrollbar-width: none;
     }
 
     #thumbnailBar::-webkit-scrollbar {
-      display: none; /* Chrome, Safari */
+      display: none;
     }
 
     #thumbnailBar.hidden {
@@ -144,41 +140,6 @@
       text-overflow: ellipsis;
     }
 
-    /* --- Control overlay --- */
-    #controlOverlay {
-      position: fixed;
-      bottom: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 200;
-      display: flex;
-      gap: 12px;
-      padding: 8px 16px;
-      background: rgba(0,0,0,0.7);
-      border-radius: 12px;
-      backdrop-filter: blur(10px);
-    }
-
-    #controlOverlay button {
-      background: rgba(255,255,255,0.15);
-      border: none;
-      color: #fff;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      min-width: 44px;
-      min-height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #controlOverlay button:active {
-      background: rgba(255,255,255,0.25);
-    }
-
     /* --- Bottom modals --- */
     .bottom-modal {
       position: fixed;
@@ -220,6 +181,8 @@
       padding: 16px 20px;
       background: transparent;
       color: #fff;
+      width: 100%;
+      height: 100%;
     }
 
     .modal-close-btn {
@@ -234,23 +197,41 @@
       min-height: 36px;
     }
 
-    /* --- PIP self video --- */
-    .self-video-pip {
-      position: fixed;
-      right: 12px;
-      bottom: 170px;
-      width: 120px;
-      height: 90px;
-      border-radius: 8px;
-      z-index: 150;
-      border: 2px solid rgba(255,255,255,0.8);
-      overflow: hidden;
-      background: #000;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
-      display: none;
+    /* --- Stacked tiles fallback --- */
+    .stacked-tiles {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px;
+      overflow: auto;
+      height: 100%;
+      width: 100%;
     }
 
-    .self-video-pip video {
+    .stacked-tiles .stacked-tile {
+      background: #0b0b0b;
+      border-radius: 8px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.03);
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stacked-tile .tile-name {
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .stacked-tile .tile-video {
+      flex: 1;
+      background: #000;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .stacked-tile .tile-video video {
       width: 100%;
       height: 100%;
       object-fit: cover;
@@ -306,21 +287,9 @@
         height: 70px;
       }
       
-      .self-video-pip {
-        width: 100px;
-        height: 75px;
-        bottom: 160px;
-      }
-      
-      #controlOverlay {
-        bottom: 8px;
-        padding: 6px 12px;
-      }
-      
-      #controlOverlay button {
-        padding: 10px 12px;
-        min-width: 40px;
-        min-height: 40px;
+      #thumbnailBar {
+        bottom: 65px;
+        height: 80px;
       }
       
       .bottom-modal {
@@ -335,22 +304,38 @@
       }
       
       #thumbnailBar {
-        bottom: 65px;
-        height: 80px;
+        bottom: 60px;
+        height: 75px;
       }
     }
 
-    /* --- Utility classes --- */
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
+    /* --- Zoom toolbar styling --- */
+    .zoom-toolbar-container {
+      position: fixed !important;
+      bottom: 8px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      z-index: 200 !important;
+      display: flex !important;
+      gap: 8px !important;
+      align-items: center !important;
+      padding: 8px 12px !important;
+      border-radius: 12px !important;
+      max-width: 95vw !important;
+      overflow: hidden !important;
+      background: rgba(0,0,0,0.7) !important;
+      backdrop-filter: blur(10px) !important;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5) !important;
+      flex-wrap: wrap !important;
+      justify-content: center !important;
+    }
+
+    /* Ensure all toolbar buttons are visible */
+    .zoom-MuiButton-root {
+      min-width: 32px !important;
+      min-height: 32px !important;
+      padding: 4px !important;
+      margin: 0 2px !important;
     }
   </style>
 </head>
@@ -364,15 +349,6 @@
 
   <!-- Thumbnails strip -->
   <div id="thumbnailBar" aria-label="Participant thumbnails"></div>
-
-  <!-- Control overlay -->
-  <div id="controlOverlay" role="toolbar" aria-label="Meeting controls">
-    <button id="chatBtn" aria-label="Chat">💬</button>
-    <button id="participantsBtn" aria-label="Participants">👥</button>
-    <button id="shareBtn" aria-label="Share screen">🖥️</button>
-    <button id="settingsBtn" aria-label="Settings">⚙️</button>
-    <button id="leaveBtn" aria-label="Leave meeting" style="background: #e53e3e;">📞</button>
-  </div>
 
   <!-- Bottom modals -->
   <div id="chatModal" class="bottom-modal" aria-hidden="true" role="dialog" aria-labelledby="chatModalTitle">
@@ -407,9 +383,6 @@
     <div id="shareModalBody" class="modal-body"></div>
   </div>
 
-  <!-- PIP self video -->
-  <div id="selfPIP" class="self-video-pip" aria-label="Your video" style="display:none"></div>
-
   <!-- Loading and error states -->
   <div id="loading">Joining meeting...</div>
   <div id="error">
@@ -421,7 +394,7 @@
   </div>
 
 <script>
-// Simplified and improved version
+// Configuration and state
 const params = new URLSearchParams(window.location.search);
 const meetingNumber = params.get("meetingNumber");
 const signature = decodeURIComponent(params.get("signature") || "");
@@ -433,6 +406,8 @@ let zoomClient = null;
 let hasJoined = false;
 let tileMap = new Map();
 let thumbnailHideTimer = null;
+let currentMainTileId = null;
+let isThumbnailMode = false;
 
 // Initialize on load
 window.addEventListener('DOMContentLoaded', startMeeting);
@@ -475,8 +450,8 @@ async function startMeeting() {
       userName: userName
     });
 
-    // Set up control button listeners
-    setupControlButtons();
+    // Set up toolbar styling and modal interception
+    setupToolbarAndModals();
 
   } catch (error) {
     console.error('Failed to start meeting:', error);
@@ -484,40 +459,184 @@ async function startMeeting() {
   }
 }
 
-function setupControlButtons() {
-  // Use the SDK's built-in controls instead of complex interception
+function setupToolbarAndModals() {
   const sdkRoot = document.getElementById('meetingSDKElement');
   
-  // Just add click handlers to our custom buttons that trigger the SDK buttons
-  document.getElementById('chatBtn').onclick = () => triggerSDKButton('Chat');
-  document.getElementById('participantsBtn').onclick = () => triggerSDKButton('Participants');
-  document.getElementById('shareBtn').onclick = () => triggerSDKButton('Share Screen');
-  document.getElementById('settingsBtn').onclick = () => triggerSDKButton('Settings');
-  document.getElementById('leaveBtn').onclick = () => triggerSDKButton('Leave');
+  // Style the toolbar to fit the screen
+  const styleToolbar = () => {
+    const toolbars = sdkRoot.querySelectorAll('[class*="toolbar"], [class*="footer"], [class*="control-bar"]');
+    toolbars.forEach(toolbar => {
+      if (toolbar.querySelector('button')) {
+        toolbar.classList.add('zoom-toolbar-container');
+      }
+    });
+  };
+  
+  // Intercept button clicks to open modals instead of default behavior
+  const interceptButtonClicks = () => {
+    sdkRoot.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      
+      const ariaLabel = button.getAttribute('aria-label') || '';
+      const title = button.getAttribute('title') || '';
+      
+      // Prevent default behavior and open our modal
+      if (ariaLabel.includes('Chat') || title.includes('Chat')) {
+        event.preventDefault();
+        event.stopPropagation();
+        openZoomPanelInModal('chat');
+      } else if (ariaLabel.includes('Participant') || title.includes('Participant')) {
+        event.preventDefault();
+        event.stopPropagation();
+        openZoomPanelInModal('participants');
+      } else if (ariaLabel.includes('Share') || title.includes('Share')) {
+        event.preventDefault();
+        event.stopPropagation();
+        openZoomPanelInModal('share');
+      } else if (ariaLabel.includes('Setting') || title.includes('Setting')) {
+        event.preventDefault();
+        event.stopPropagation();
+        openZoomPanelInModal('settings');
+      } else if (ariaLabel.includes('Leave') || title.includes('Leave')) {
+        // Let leave button work normally but ensure we handle the meeting end
+        setTimeout(() => {
+          if (!hasJoined) {
+            handleMeetingEnd();
+          }
+        }, 1000);
+      }
+    }, true);
+  };
+  
+  // Apply initial styling and set up observer for dynamic changes
+  styleToolbar();
+  interceptButtonClicks();
+  
+  const observer = new MutationObserver(() => {
+    styleToolbar();
+  });
+  
+  observer.observe(sdkRoot, {
+    childList: true,
+    subtree: true
+  });
 }
 
-function triggerSDKButton(buttonLabel) {
+function openZoomPanelInModal(panelType) {
   const sdkRoot = document.getElementById('meetingSDKElement');
-  const buttons = sdkRoot.querySelectorAll('button');
   
-  for (const button of buttons) {
-    const label = button.getAttribute('aria-label') || button.textContent;
-    if (label && label.includes(buttonLabel)) {
+  // First, try to find an existing panel
+  let panel = findZoomPanel(panelType);
+  
+  if (panel) {
+    // Move the panel to our modal
+    movePanelToModal(panelType, panel);
+  } else {
+    // If no panel found, trigger the button click to create one
+    const button = findToolbarButton(panelType);
+    if (button) {
       button.click();
-      showThumbnailsTemporarily();
-      return;
+      
+      // Wait for panel to appear and then move it
+      setTimeout(() => {
+        panel = findZoomPanel(panelType);
+        if (panel) {
+          movePanelToModal(panelType, panel);
+        }
+      }, 500);
+    }
+  }
+}
+
+function findZoomPanel(panelType) {
+  const sdkRoot = document.getElementById('meetingSDKElement');
+  const keyword = panelType.toLowerCase();
+  
+  // Look for dialog elements with relevant content
+  const dialogs = sdkRoot.querySelectorAll('[role="dialog"]');
+  
+  for (const dialog of dialogs) {
+    const text = dialog.textContent.toLowerCase();
+    const ariaLabel = dialog.getAttribute('aria-label') || '';
+    
+    if (text.includes(keyword) || ariaLabel.toLowerCase().includes(keyword)) {
+      return dialog;
     }
   }
   
-  // Fallback for leave
-  if (buttonLabel === 'Leave') {
-    zoomClient.leave();
+  // Also check for panels that might not have role="dialog"
+  const panels = sdkRoot.querySelectorAll('[class*="panel"], [class*="drawer"], [class*="menu"]');
+  
+  for (const panel of panels) {
+    const text = panel.textContent.toLowerCase();
+    if (text.includes(keyword)) {
+      return panel;
+    }
+  }
+  
+  return null;
+}
+
+function findToolbarButton(buttonType) {
+  const sdkRoot = document.getElementById('meetingSDKElement');
+  const keyword = buttonType.toLowerCase();
+  const buttons = sdkRoot.querySelectorAll('button');
+  
+  for (const button of buttons) {
+    const ariaLabel = button.getAttribute('aria-label') || '';
+    const title = button.getAttribute('title') || '';
+    
+    if (ariaLabel.toLowerCase().includes(keyword) || title.toLowerCase().includes(keyword)) {
+      return button;
+    }
+  }
+  
+  return null;
+}
+
+function movePanelToModal(panelType, panel) {
+  const modalBody = document.getElementById(panelType + 'ModalBody');
+  
+  if (!modalBody) return;
+  
+  // Clear previous content
+  modalBody.innerHTML = '';
+  
+  // Move the panel to the modal
+  modalBody.appendChild(panel);
+  
+  // Open the modal
+  openBottomModal(panelType);
+  
+  // Ensure the panel is styled correctly for the modal
+  panel.style.width = '100%';
+  panel.style.height = '100%';
+  panel.style.overflow = 'auto';
+}
+
+function openBottomModal(kind) {
+  document.getElementById(kind + 'Modal').classList.add('open');
+  document.getElementById(kind + 'Modal').setAttribute('aria-hidden', 'false');
+}
+
+function closeBottomModal(kind) {
+  document.getElementById(kind + 'Modal').classList.remove('open');
+  document.getElementById(kind + 'Modal').setAttribute('aria-hidden', 'true');
+  
+  // Return the panel to the SDK root if needed
+  const modalBody = document.getElementById(kind + 'ModalBody');
+  const panel = modalBody.querySelector('[role="dialog"], [class*="panel"]');
+  
+  if (panel) {
+    modalBody.removeChild(panel);
+    document.getElementById('meetingSDKElement').appendChild(panel);
   }
 }
 
 function startUIUpdates() {
-  // Start observing for participant changes
-  setInterval(updateThumbnails, 2000);
+  // Start monitoring for participant changes
+  setInterval(updateParticipantTiles, 2000);
   startThumbnailAutoHide();
   
   // Add activity listeners to show thumbnails
@@ -526,66 +645,182 @@ function startUIUpdates() {
   });
 }
 
-function updateThumbnails() {
+function updateParticipantTiles() {
   if (!hasJoined) return;
   
   const sdkRoot = document.getElementById('meetingSDKElement');
-  const videoContainers = sdkRoot.querySelectorAll('[class*="video-container"], li.zoom-MuiListItem-root');
+  const videoContainers = sdkRoot.querySelectorAll('li.zoom-MuiListItem-root, [class*="video-container"]');
   
-  // Simple thumbnail management - just show/hide based on participants
-  const thumbnailBar = document.getElementById('thumbnailBar');
-  
-  if (videoContainers.length > 1) {
-    // Multiple participants - show thumbnails
-    buildSimpleThumbnails(videoContainers);
-    document.getElementById('selfPIP').style.display = 'none';
+  if (videoContainers.length > 0) {
+    // We have gallery view - build thumbnails
+    buildThumbnailView(videoContainers);
+    isThumbnailMode = true;
   } else {
-    // Single participant - show PIP
-    thumbnailBar.innerHTML = '';
-    setupSelfPIP();
+    // Fallback to stacked view
+    buildStackedView();
+    isThumbnailMode = false;
   }
 }
 
-function buildSimpleThumbnails(containers) {
+function buildThumbnailView(containers) {
   const thumbnailBar = document.getElementById('thumbnailBar');
+  const mainContainer = document.getElementById('mainVideoContainer');
+  
+  // Clear previous content
   thumbnailBar.innerHTML = '';
+  tileMap.clear();
+  
+  // Process each container
+  const tileData = [];
   
   containers.forEach((container, index) => {
     const video = container.querySelector('video');
-    if (!video) return;
+    const nameElement = container.querySelector('.zoom-MuiTypography-noWrap');
+    const name = nameElement ? nameElement.textContent : `Participant ${index + 1}`;
     
+    const isSelf = name.toLowerCase().includes(userName.toLowerCase()) || 
+                  (video && video.id === 'ZOOM_WEB_SDK_SELF_VIDEO');
+    
+    const tileId = `tile-${index}`;
+    
+    tileData.push({
+      id: tileId,
+      container,
+      video,
+      name,
+      isSelf
+    });
+    
+    tileMap.set(tileId, { container, video, name, isSelf });
+  });
+  
+  // Sort to put self first
+  tileData.sort((a, b) => {
+    if (a.isSelf && !b.isSelf) return -1;
+    if (!a.isSelf && b.isSelf) return 1;
+    return 0;
+  });
+  
+  // Create thumbnails
+  tileData.forEach((tile, index) => {
     const thumb = document.createElement('div');
     thumb.className = 'thumbnail';
-    thumb.innerHTML = `
-      <video autoplay muted playsinline></video>
-      <div class="thumb-name">Participant ${index + 1}</div>
-    `;
+    thumb.id = `thumb-${tile.id}`;
     
-    // Try to use the video stream
-    try {
-      if (video.srcObject) {
-        thumb.querySelector('video').srcObject = video.srcObject;
-      }
-    } catch (e) {
-      // Ignore - we'll show placeholder
+    if (index === 0) {
+      thumb.classList.add('active');
+      currentMainTileId = tile.id;
+      showTileInMainView(tile);
     }
     
+    // Create video element for thumbnail
+    if (tile.video) {
+      const thumbVideo = document.createElement('video');
+      thumbVideo.autoplay = true;
+      thumbVideo.muted = true;
+      thumbVideo.playsInline = true;
+      thumbVideo.style.width = '100%';
+      thumbVideo.style.height = '100%';
+      thumbVideo.style.objectFit = 'cover';
+      
+      try {
+        if (tile.video.srcObject) {
+          thumbVideo.srcObject = tile.video.srcObject;
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+      
+      thumb.appendChild(thumbVideo);
+    } else {
+      // Placeholder for video
+      const placeholder = document.createElement('div');
+      placeholder.style.width = '100%';
+      placeholder.style.height = '100%';
+      placeholder.style.background = '#222';
+      placeholder.style.display = 'flex';
+      placeholder.style.alignItems = 'center';
+      placeholder.style.justifyContent = 'center';
+      placeholder.style.color = '#fff';
+      placeholder.style.fontSize = '12px';
+      placeholder.textContent = 'No Video';
+      thumb.appendChild(placeholder);
+    }
+    
+    // Add name overlay
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'thumb-name';
+    nameDiv.textContent = tile.name;
+    thumb.appendChild(nameDiv);
+    
+    // Add click handler
     thumb.onclick = () => {
-      // Simple main view switching
-      showInMainView(container);
+      // Update active state
+      document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('active'));
+      thumb.classList.add('active');
+      
+      // Show in main view
+      showTileInMainView(tile);
+      currentMainTileId = tile.id;
+      
+      // Reset thumbnail hide timer
       showThumbnailsTemporarily();
     };
     
     thumbnailBar.appendChild(thumb);
   });
+  
+  // Show the thumbnail bar
+  thumbnailBar.classList.remove('hidden');
 }
 
-function showInMainView(container) {
+function buildStackedView() {
   const mainContainer = document.getElementById('mainVideoContainer');
-  const video = container.querySelector('video');
+  const thumbnailBar = document.getElementById('thumbnailBar');
   
-  if (video) {
-    mainContainer.innerHTML = '';
+  // Hide thumbnail bar
+  thumbnailBar.classList.add('hidden');
+  
+  // Clear main container
+  mainContainer.innerHTML = '';
+  
+  // Create stacked view
+  const stackedContainer = document.createElement('div');
+  stackedContainer.className = 'stacked-tiles';
+  
+  // Use canvas if available (gallery view)
+  const canvas = document.getElementById('zoom-sdk-video-canvas');
+  if (canvas) {
+    const canvasContainer = document.createElement('div');
+    canvasContainer.className = 'stacked-tile';
+    canvasContainer.style.flex = '1';
+    
+    const canvasClone = canvas.cloneNode(true);
+    canvasClone.style.width = '100%';
+    canvasClone.style.height = '100%';
+    
+    canvasContainer.appendChild(canvasClone);
+    stackedContainer.appendChild(canvasContainer);
+  } else {
+    // Fallback: show message
+    const message = document.createElement('div');
+    message.style.color = '#fff';
+    message.style.textAlign = 'center';
+    message.style.padding = '20px';
+    message.textContent = 'Waiting for participants...';
+    stackedContainer.appendChild(message);
+  }
+  
+  mainContainer.appendChild(stackedContainer);
+}
+
+function showTileInMainView(tile) {
+  const mainContainer = document.getElementById('mainVideoContainer');
+  
+  // Clear main container
+  mainContainer.innerHTML = '';
+  
+  if (tile.video) {
     const mainVideo = document.createElement('video');
     mainVideo.autoplay = true;
     mainVideo.playsInline = true;
@@ -594,33 +829,51 @@ function showInMainView(container) {
     mainVideo.style.objectFit = 'contain';
     
     try {
-      if (video.srcObject) {
-        mainVideo.srcObject = video.srcObject;
+      if (tile.video.srcObject) {
+        mainVideo.srcObject = tile.video.srcObject;
       }
     } catch (e) {
       console.warn('Could not set main video source');
     }
     
-    mainContainer.appendChild(mainVideo);
-  }
-}
-
-function setupSelfPIP() {
-  const sdkRoot = document.getElementById('meetingSDKElement');
-  const selfVideo = sdkRoot.querySelector('video[id*="SELF"]') || sdkRoot.querySelector('video');
-  
-  if (selfVideo) {
-    const pip = document.getElementById('selfPIP');
-    pip.style.display = 'block';
-    pip.innerHTML = '<video autoplay muted playsinline></video>';
+    // Add name overlay
+    const nameOverlay = document.createElement('div');
+    nameOverlay.style.position = 'absolute';
+    nameOverlay.style.bottom = '12px';
+    nameOverlay.style.left = '12px';
+    nameOverlay.style.background = 'rgba(0,0,0,0.7)';
+    nameOverlay.style.color = '#fff';
+    nameOverlay.style.padding = '6px 12px';
+    nameOverlay.style.borderRadius = '4px';
+    nameOverlay.style.fontSize = '14px';
+    nameOverlay.textContent = tile.name;
     
-    try {
-      if (selfVideo.srcObject) {
-        pip.querySelector('video').srcObject = selfVideo.srcObject;
-      }
-    } catch (e) {
-      // Ignore
-    }
+    mainContainer.appendChild(mainVideo);
+    mainContainer.appendChild(nameOverlay);
+  } else {
+    // Show placeholder
+    const placeholder = document.createElement('div');
+    placeholder.style.width = '100%';
+    placeholder.style.height = '100%';
+    placeholder.style.background = '#000';
+    placeholder.style.display = 'flex';
+    placeholder.style.flexDirection = 'column';
+    placeholder.style.alignItems = 'center';
+    placeholder.style.justifyContent = 'center';
+    placeholder.style.color = '#fff';
+    
+    const icon = document.createElement('div');
+    icon.style.fontSize = '48px';
+    icon.style.marginBottom = '16px';
+    icon.textContent = '👤';
+    
+    const name = document.createElement('div');
+    name.style.fontSize = '18px';
+    name.textContent = tile.name;
+    
+    placeholder.appendChild(icon);
+    placeholder.appendChild(name);
+    mainContainer.appendChild(placeholder);
   }
 }
 
@@ -632,27 +885,17 @@ function startThumbnailAutoHide() {
 function resetThumbnailHideTimer() {
   clearTimeout(thumbnailHideTimer);
   thumbnailHideTimer = setTimeout(() => {
-    document.getElementById('thumbnailBar').classList.add('hidden');
-  }, 3000);
+    if (isThumbnailMode) {
+      document.getElementById('thumbnailBar').classList.add('hidden');
+    }
+  }, 30000); // 30 seconds
 }
 
 function showThumbnailsTemporarily() {
-  const thumbnailBar = document.getElementById('thumbnailBar');
-  if (thumbnailBar.children.length > 0) {
-    thumbnailBar.classList.remove('hidden');
+  if (isThumbnailMode) {
+    document.getElementById('thumbnailBar').classList.remove('hidden');
     resetThumbnailHideTimer();
   }
-}
-
-// Modal functions
-function openBottomModal(kind) {
-  document.getElementById(kind + 'Modal').classList.add('open');
-  document.getElementById(kind + 'Modal').setAttribute('aria-hidden', 'false');
-}
-
-function closeBottomModal(kind) {
-  document.getElementById(kind + 'Modal').classList.remove('open');
-  document.getElementById(kind + 'Modal').setAttribute('aria-hidden', 'true');
 }
 
 // Error handling
@@ -664,15 +907,39 @@ function showError(message) {
 
 function retryJoin() {
   document.getElementById('error').style.display = 'none';
-  startMeeting();
+  document.getElementById('loading').style.display = 'flex';
+  
+  // Reset state
+  hasJoined = false;
+  tileMap.clear();
+  
+  // Restart meeting
+  setTimeout(() => {
+    startMeeting();
+  }, 1000);
 }
 
 function handleMeetingEnd() {
+  hasJoined = false;
+  
+  // Notify React Native app
   if (window.ReactNativeWebView) {
-    window.ReactNativeWebView.postMessage(JSON.stringify({ action: 'meetingEnded' }));
-  } else {
-    alert('Meeting has ended');
+    window.ReactNativeWebView.postMessage(JSON.stringify({ 
+      action: 'meetingEnded',
+      meetingNumber: meetingNumber
+    }));
   }
+  
+  // Show ended message
+  const mainContainer = document.getElementById('mainVideoContainer');
+  mainContainer.innerHTML = `
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;">
+      <div>
+        <h2>Meeting Ended</h2>
+        <p>You can close this window</p>
+      </div>
+    </div>
+  `;
 }
 </script>
 </body>
