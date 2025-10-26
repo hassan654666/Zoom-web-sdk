@@ -145,7 +145,7 @@
   </head>
 
   <body>
-    <div id="headerBar">Zoom Meeting</div>
+    <!-- <div id="headerBar">Zoom Meeting</div> -->
     <div id="meetingContainer">
       <div id="meetingSDKElement"></div>
       <div id="bottomPanel"></div>
@@ -252,19 +252,39 @@
               //     anchorElement: bottomPanel,
               //   },
               // },
-              toolbar: {
-                buttons: [
-                  "microphone",
-                  "camera",
-                  "participants",
-                  "chat",
-                  // "share",
-                  // "whiteboard",
-                  // "recording",
-                  "settings",
-                  "leave",
-                ],
-              }
+              meetingInfo: [
+                "topic",
+                "host",
+                "mn",
+                "pwd",
+                "participant",
+                "invite",
+                "joinTime",
+                "whiteboard",
+              ],
+              // toolbar: {
+              //   buttons: [],
+              // },
+              branding: {
+                name: "",
+                logo: "",
+                hideMeetingInfo: true,
+              },
+              // toolbar: {
+              //   buttons: [
+              //     "microphone",
+              //     "camera",
+              //     "participants",
+              //     "chat",
+              //     // "share",
+              //     // "whiteboard",
+              //     // "recording",
+              //     "settings",
+              //     "leave",
+              //   ],
+              //   hide: ["share", "whiteboard", "recording"],
+              //   alwaysVisibleButtons: ["chat"]
+              // }
             },
           });
 
