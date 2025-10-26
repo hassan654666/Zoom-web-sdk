@@ -28,7 +28,8 @@
         position: relative;
         display: flex;
         flex-direction: column;
-        background: #000;
+        background: #252525;
+        overflow: hidden;
       }
 
       #meetingSDKElement {
@@ -41,37 +42,72 @@
         overflow: hidden;
       }
 
+      video {
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        border-radius: 8px;
+        display: block;
+      }
+
+      video::-webkit-media-controls-enclosure {
+        overflow: visible !important;
+      }
+
+      /* Hide Meeting Info (top-left “i” icon) */
+      button[aria-label="Meeting Information"],
+      .zm-header--meeting-info {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+
       /* --- Dedicated bottom popper container --- */
-      #bottomPanel {
+      /* #bottomPanel {
         width: 100%;
         height: 30vh;
         max-height: 300px;
         background: rgba(20, 20, 20, 0.98);
-        position: relative;
-        overflow-y: auto;
-        display: none; /* shown dynamically */
-        z-index: 9999;
-      }
+        position: absolute;
+        bottom: 0;
+        overflow-y: auto; */
+       /* display: none; /* shown dynamically */
+        /* z-index: 9999;
+      } */
+
+      /* LEFT panel for poppers (chat/participants/settings/etc.) */
+      /* #leftPanel {
+        width: 360px;            /* adjust to taste, mobile: use smaller width */
+        /* max-width: 40%;
+        min-width: 260px;
+        height: 100vh;
+        background: rgba(12,12,12,0.98);
+        border-right: 1px solid rgba(255,255,255,0.03);
+        box-sizing: border-box;
+        z-index: 10000; */
+        /*display: none; /* start hidden; shown when popper opens */
+        /* overflow-y: auto;
+        -webkit-overflow-scrolling: touch; */
+      /*} */
 
       /* Ensure poppers render correctly into bottomPanel */
-      .zm-popover-content,
+      /* .zm-popover-content,
       .zm-dialog,
       .zm-modal,
       .zm-modal-content,
       .ReactModal__Content {
         position: relative !important;
-        top: 0 !important;
+        /* top: 0 !important;
         left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
+        right: 0 !important; */
+        /* bottom: 0 !important;
         max-width: 100% !important;
-        width: 100% !important;
-        height: 100% !important;
-        border-radius: 0 !important;
-      }
+        width: 100% !important; */
+        /* height: 100% !important; */
+        /* border-radius: 0 !important; */
+      /* } */ 
 
       /* Fix for overflow UI in landscape mode */
-      @media (orientation: landscape) {
+      /* @media (orientation: landscape) {
         #meetingSDKElement {
           height: 90vh !important;
         }
@@ -79,17 +115,17 @@
           height: 10vh !important;
           max-height: 120px;
         }
-      }
+      } */
 
       /* Gallery pagination arrows always visible */
-      .zm-gallery-view .zm-gallery-page-btn {
+      /* .zm-gallery-view .zm-gallery-page-btn {
         opacity: 1 !important;
         visibility: visible !important;
       }
 
       .zm-gallery-page-btn {
         z-index: 10000 !important;
-      }
+      } */
     </style>
   </head>
 
@@ -97,12 +133,14 @@
     <div id="meetingContainer">
       <div id="meetingSDKElement"></div>
       <div id="bottomPanel"></div>
+      <!-- <div id="bottomPanel"></div> -->
     </div>
 
     <script>
       (async () => {
         const meetingSDKElement = document.getElementById("meetingSDKElement");
         const bottomPanel = document.getElementById("bottomPanel");
+        // const leftPanel = document.getElementById("leftPanel");
         const client = ZoomMtgEmbedded.createClient();
 
         // --- Credentials (replace with actual) ---
@@ -119,26 +157,33 @@
             language: "en-US",
             maximumVideosInGalleryView: 1,
             customize: {
+              // meeting: {
+              //   popper: {
+              //     placement: "top",
+              //     disableDraggable: true,
+              //     anchorElement: meetingSDKElement,
+              //   },
+              // },
               video: {
-                isResizable: true,
-               video: {
-                  popper: {
-                    anchorElement: bottomPanel,
-                    placement: 'bottom',
-                    disableDraggable: true,
-                    disablePortal: true,
-                    offset: { mainAxis: 12 },
-                    disableHideOnClickOutside: false
-                  }
-                },
+                isResizable: false,
+                showPipButton: true,
+                defaultViewType: 'ribbon',
+                // popper: {
+                //   anchorElement: bottomPanel,
+                //   placement: 'bottom',
+                //   disableDraggable: true,
+                //   disablePortal: true,
+                //   offset: { mainAxis: 12 },
+                //   disableHideOnClickOutside: false
+                // },
                 viewSizes: {
                   default: {
-                    width: window.innerWidth,
-                    height: window.innerHeight * 0.7,
+                    width: window.innerWidth * 0.8,
+                    height: window.innerHeight * 0.92,
                   },
                   ribbon: {
-                    width: window.innerWidth,
-                    height: window.innerHeight * 0.7,
+                    width: window.innerWidth * 1,
+                    height: window.innerHeight * 0.9,
                   },
                 },
               },
@@ -156,13 +201,54 @@
                   anchorElement: bottomPanel,
                 },
               },
-              settings: {
+              setting: {
                 popper: {
                   placement: "bottom",
                   disableDraggable: true,
                   anchorElement: bottomPanel,
                 },
               },
+              reactions: {
+                popper: {
+                  placement: "bottom",
+                  disableDraggable: true,
+                  anchorElement: bottomPanel,
+                },
+              },
+              captionSettings: {
+                popper: {
+                  placement: "bottom",
+                  disableDraggable: true,
+                  anchorElement: bottomPanel,
+                },
+              },
+              activeApps: {
+                popper: {
+                  placement: "bottom",
+                  disableDraggable: true,
+                  anchorElement: bottomPanel,
+                },
+              },
+              // meetingInfo: {
+              //   popper: {
+              //     placement: "bottom",
+              //     disableDraggable: true,
+              //     anchorElement: bottomPanel,
+              //   },
+              // },
+              toolbar: {
+                buttons: [
+                  "microphone",
+                  "camera",
+                  "participants",
+                  "chat",
+                  // "share",
+                  // "whiteboard",
+                  // "recording",
+                  "settings",
+                  "leave",
+                ],
+              }
             },
           });
 
@@ -176,12 +262,16 @@
 
           console.log("✅ Joined meeting automatically!");
 
-          // --- Show bottomPanel when a popper opens ---
-          const observer = new MutationObserver(() => {
-            const popperOpen = document.querySelector(".zm-modal, .zm-dialog, .zm-popover-content");
-            bottomPanel.style.display = popperOpen ? "block" : "none";
-          });
+          const forceBottomPanelPlacement = () => {
+            const poppers = document.querySelectorAll('.zm-popover-content, .zm-modal');
+            poppers.forEach(p => {
+              if (!bottomPanel.contains(p)) bottomPanel.appendChild(p);
+            });
+          };
+
+          const observer = new MutationObserver(forceBottomPanelPlacement);
           observer.observe(document.body, { childList: true, subtree: true });
+
 
           // --- Meeting End Notification ---
           client.on("connection-change", (payload) => {
@@ -204,8 +294,8 @@
 
             client.updateVideoOptions({
               viewSizes: {
-                default: { width: width, height: height * 0.7 },
-                ribbon: { width: width, height: height * 0.7 },
+                default: { width: width * 0.8, height: height * 0.92 },
+                ribbon: { width: width * 1, height: height * 0.9 },
               },
             });
 
@@ -214,6 +304,36 @@
 
           window.addEventListener("resize", handleResize);
           handleResize();
+
+          // --- Manual PIP enable fallback ---
+          function enablePiP() {
+            const video = document.querySelector('video');
+            if (video && document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+              video.requestPictureInPicture().catch(err => console.warn('PiP failed:', err));
+            }
+          }
+
+          // optional: expose for React Native
+          window.enablePiP = enablePiP;
+
+          // optional: auto-enable PiP when app backgrounds
+          document.addEventListener('visibilitychange', () => {
+            if (document.hidden) enablePiP();
+          });
+
+          setTimeout(() => {
+            document
+              .querySelectorAll('button[aria-label="Meeting Information"]')
+              .forEach(btn => (btn.style.display = 'none'));
+          }, 2000);
+
+          // window.addEventListener("orientationchange", handleOrientationChange);
+          // window.addEventListener("resize", handleOrientationChange);
+
+          // function handleOrientationChange() {
+          //   console.log("Orientation:", screen.orientation.type);
+          //   restartCamera();
+          // }
 
         } catch (error) {
           console.error("❌ Error joining meeting:", error);
