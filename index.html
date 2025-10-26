@@ -20,6 +20,27 @@
         overflow: hidden;
         display: flex;
         flex-direction: column;
+        /* padding-top: 24px; */
+        /* padding-bottom: 24px; */
+      }
+
+      #headerBar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 65px;
+        background: #1e1e1e;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        z-index: 10000; /* sits above the disclosure banner */
+      }
+
+      @media (orientation: landscape) {
+        #headerBar { display: none; }
       }
 
       #meetingContainer {
@@ -30,6 +51,7 @@
         flex-direction: column;
         background: #252525;
         overflow: hidden;
+        
       }
 
       #meetingSDKElement {
@@ -53,26 +75,25 @@
         overflow: visible !important;
       }
 
-      /* Hide Meeting Info (top-left “i” icon) */
-      button[aria-label="Meeting Information"],
-      .zm-header--meeting-info {
+      .zoom-MuiToolbar-root,
+      .zoom-MuiTabs-root,
+      .zoommtg-drag-video,
+      [title="Meeting Information"],
+      [aria-label="See apps that are accessing your meeting content"] {
         display: none !important;
         visibility: hidden !important;
+        height: 0 !important;
         pointer-events: none !important;
       }
 
       /* --- Dedicated bottom popper container --- */
-      /* #bottomPanel {
-        width: 100%;
-        height: 30vh;
-        max-height: 300px;
-        background: rgba(20, 20, 20, 0.98);
-        position: absolute;
+      #bottomPanel {
+        position: fixed;
         bottom: 0;
-        overflow-y: auto; */
-       /* display: none; /* shown dynamically */
-        /* z-index: 9999;
-      } */
+        left: 0;
+        width: 100%;
+        z-index: 9999;
+      }
 
       /* LEFT panel for poppers (chat/participants/settings/etc.) */
       /* #leftPanel {
@@ -90,21 +111,15 @@
       /*} */
 
       /* Ensure poppers render correctly into bottomPanel */
-      /* .zm-popover-content,
-      .zm-dialog,
-      .zm-modal,
-      .zm-modal-content,
-      .ReactModal__Content {
-        position: relative !important;
-        /* top: 0 !important;
-        left: 0 !important;
-        right: 0 !important; */
-        /* bottom: 0 !important;
-        max-width: 100% !important;
-        width: 100% !important; */
-        /* height: 100% !important; */
-        /* border-radius: 0 !important; */
-      /* } */ 
+      /* #bottomPanel > .zoom-MuiPopover-root,
+      #bottomPanel > .zoom-MuiModal-root,
+      #bottomPanel > .zoom-MuiDialog-root {
+        position: absolute !important;
+        bottom: 0 !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 9999 !important;
+      } */
 
       /* Fix for overflow UI in landscape mode */
       /* @media (orientation: landscape) {
@@ -130,6 +145,7 @@
   </head>
 
   <body>
+    <div id="headerBar">Zoom Meeting</div>
     <div id="meetingContainer">
       <div id="meetingSDKElement"></div>
       <div id="bottomPanel"></div>
@@ -167,7 +183,7 @@
               video: {
                 isResizable: false,
                 showPipButton: true,
-                defaultViewType: 'ribbon',
+                defaultViewType: 'gallery',
                 // popper: {
                 //   anchorElement: bottomPanel,
                 //   placement: 'bottom',
@@ -178,7 +194,7 @@
                 // },
                 viewSizes: {
                   default: {
-                    width: window.innerWidth * 0.8,
+                    width: window.innerWidth * 1,
                     height: window.innerHeight * 0.92,
                   },
                   ribbon: {
@@ -262,16 +278,34 @@
 
           console.log("✅ Joined meeting automatically!");
 
-          const forceBottomPanelPlacement = () => {
-            const poppers = document.querySelectorAll('.zm-popover-content, .zm-modal');
-            poppers.forEach(p => {
-              if (!bottomPanel.contains(p)) bottomPanel.appendChild(p);
-            });
-          };
+          // ✅ Updated for Zoom Web Meeting SDK v4.0.0
+          // const forceBottomPanelPlacement = () => {
+          //   //const bottomPanel = document.getElementById('bottomPanel'); // Ensure this exists
+          //   if (!bottomPanel) return;
 
-          const observer = new MutationObserver(forceBottomPanelPlacement);
-          observer.observe(document.body, { childList: true, subtree: true });
+          //   // New Zoom popovers & modals are mounted under body with these classes
+          //   const poppers = document.querySelectorAll(
+          //     '.zoom-MuiPopper-root, .zoom-MuiModal-root'
+          //   );
 
+          //   poppers.forEach((p) => {
+          //     // Only move visible & unmounted ones into bottom panel
+          //     if (p.parentElement !== bottomPanel && p.offsetParent !== null) {
+          //       bottomPanel.appendChild(p);
+          //     }
+          //   });
+          // };
+
+          // // Observe for new Zoom popper/modal mounts
+          // const observer = new MutationObserver(() => {
+          //   forceBottomPanelPlacement();
+          // });
+
+          // // Observe entire body because Zoom mounts globally
+          // observer.observe(document.body, {
+          //   childList: true,
+          //   subtree: true,
+          // });
 
           // --- Meeting End Notification ---
           client.on("connection-change", (payload) => {
@@ -285,6 +319,7 @@
                 console.log("⚠️ ReactNativeWebView not found");
               }
             }
+            disablePiP();
           });
 
           // --- Dynamic Resize Handler ---
@@ -294,7 +329,7 @@
 
             client.updateVideoOptions({
               viewSizes: {
-                default: { width: width * 0.8, height: height * 0.92 },
+                default: { width: width * 1, height: height * 0.92 },
                 ribbon: { width: width * 1, height: height * 0.9 },
               },
             });
@@ -305,27 +340,94 @@
           window.addEventListener("resize", handleResize);
           handleResize();
 
-          // --- Manual PIP enable fallback ---
-          function enablePiP() {
-            const video = document.querySelector('video');
-            if (video && document.pictureInPictureEnabled && !document.pictureInPictureElement) {
-              video.requestPictureInPicture().catch(err => console.warn('PiP failed:', err));
+          let pipEnabled = false;
+          let zoomClientInstance = null; // store your Zoom meeting instance if needed
+
+          // --- Wait for video metadata before enabling PiP ---
+          async function waitForVideoReady() {
+            const video = document.querySelector("video");
+            if (!video) return null;
+            if (video.readyState >= 1) return video; // metadata loaded
+            return new Promise(resolve => {
+              video.addEventListener("loadedmetadata", () => resolve(video), { once: true });
+            });
+          }
+
+          async function enablePiP() {
+            try {
+              const video = await waitForVideoReady();
+              if (!video) return console.warn("No video element available yet.");
+              if (document.pictureInPictureElement) return;
+              if (!pipEnabled) {
+                await video.requestPictureInPicture();
+                pipEnabled = true;
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(
+                    JSON.stringify({ pip: "entered" })
+                  );
+                } else {
+                  console.log("⚠️ ReactNativeWebView not found");
+                }
+                console.log("✅ PiP enabled");
+              }
+            } catch (err) {
+              console.error("PiP failed:", err);
             }
           }
 
-          // optional: expose for React Native
-          window.enablePiP = enablePiP;
+          async function disablePiP() {
+            try {
+              if (document.pictureInPictureElement) {
+                await document.exitPictureInPicture();
+                pipEnabled = false;
+                console.log("✅ PiP disabled");
+              }
+            } catch (err) {
+              console.error("Exit PiP failed:", err);
+            }
+          }
 
-          // optional: auto-enable PiP when app backgrounds
-          document.addEventListener('visibilitychange', () => {
+          // ✅ Prevent PiP on first load
+          window.onload = () => {
+            pipEnabled = false;
+            disablePiP();
+            console.log("🔹 PiP is disabled on first load");
+          };
+
+          // ✅ React Native bridge access
+          window.enablePiP = enablePiP;
+          window.disablePiP = disablePiP;
+
+          // ✅ Auto-enable PiP when app backgrounds (optional)
+          document.addEventListener("visibilitychange", () => {
             if (document.hidden) enablePiP();
           });
 
-          setTimeout(() => {
-            document
-              .querySelectorAll('button[aria-label="Meeting Information"]')
-              .forEach(btn => (btn.style.display = 'none'));
-          }, 2000);
+          function hideZoomTopToolbar() {
+            const selectors = [
+              '.zoom-MuiToolbar-root',     // The whole top bar container
+              '.zoom-MuiTabs-root',        // View mode tabs
+              '[title="Meeting Information"]', // Info icon button
+              '[aria-label="See apps that are accessing your meeting content"]', // Marketplace icon
+              '.zoommtg-drag-video'        // Drag bar
+            ];
+
+            selectors.forEach(sel => {
+              document.querySelectorAll(sel).forEach(el => {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+                el.style.height = '0';
+                el.style.pointerEvents = 'none';
+              });
+            });
+          }
+
+          // Initial removal after joining
+          setTimeout(hideZoomTopToolbar, 2000);
+
+          // Watch for reinjection
+          const observer2 = new MutationObserver(() => hideZoomTopToolbar());
+          observer2.observe(document.body, { childList: true, subtree: true });
 
           // window.addEventListener("orientationchange", handleOrientationChange);
           // window.addEventListener("resize", handleOrientationChange);
