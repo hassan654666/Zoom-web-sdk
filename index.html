@@ -296,173 +296,152 @@
             userName: userName,
           });
 
-          console.log("✅ Joined meeting automatically!");
+        } catch (error) {
+          console.error("❌ Error joining meeting:", error);
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({ join: "joinFailed" })
+          );
+        }
 
-          // ✅ Updated for Zoom Web Meeting SDK v4.0.0
-          // const forceBottomPanelPlacement = () => {
-          //   //const bottomPanel = document.getElementById('bottomPanel'); // Ensure this exists
-          //   if (!bottomPanel) return;
+        console.log("✅ Joined meeting automatically!");
 
-          //   // New Zoom popovers & modals are mounted under body with these classes
-          //   const poppers = document.querySelectorAll(
-          //     '.zoom-MuiPopper-root, .zoom-MuiModal-root'
-          //   );
+        // --- Meeting End Notification ---
+        client.on("connection-change", (payload) => {
+          if (payload.state === "Closed") {
+            console.log("📩 Meeting ended, notifying app...");
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(
+                JSON.stringify({ action: "meetingEnded" })
+              );
+            } else {
+              console.log("⚠️ ReactNativeWebView not found");
+            }
+          }
+          disablePiP();
+        });
 
-          //   poppers.forEach((p) => {
-          //     // Only move visible & unmounted ones into bottom panel
-          //     if (p.parentElement !== bottomPanel && p.offsetParent !== null) {
-          //       bottomPanel.appendChild(p);
-          //     }
-          //   });
-          // };
+        window.addEventListener("message", (event) => {
+          const data = JSON.parse(event.data);
+          if (data.action === "leaveMeeting") {
+            client.leave(); // Zoom SDK call
+          }
+        });
 
-          // // Observe for new Zoom popper/modal mounts
-          // const observer = new MutationObserver(() => {
-          //   forceBottomPanelPlacement();
-          // });
+        // --- Dynamic Resize Handler ---
+        const handleResize = () => {
+          const width = window.innerWidth;
+          const height = window.innerHeight;
 
-          // // Observe entire body because Zoom mounts globally
-          // observer.observe(document.body, {
-          //   childList: true,
-          //   subtree: true,
-          // });
+          client.updateVideoOptions({
+            viewSizes: {
+              default: { width: width * 1, height: height * 0.92 },
+              ribbon: { width: width * 1, height: height * 0.9 },
+            },
+          });
 
-          // --- Meeting End Notification ---
-          client.on("connection-change", (payload) => {
-            if (payload.state === "Closed") {
-              console.log("📩 Meeting ended, notifying app...");
+          console.log("📱 Rotated/resized:", width, "x", height);
+        };
+
+        window.addEventListener("resize", handleResize);
+        handleResize();
+
+        let pipEnabled = false;
+        let zoomClientInstance = null; // store your Zoom meeting instance if needed
+
+        // --- Wait for video metadata before enabling PiP ---
+        async function waitForVideoReady() {
+          const video = document.querySelector("video");
+          if (!video) return null;
+          if (video.readyState >= 1) return video; // metadata loaded
+          return new Promise(resolve => {
+            video.addEventListener("loadedmetadata", () => resolve(video), { once: true });
+          });
+        }
+
+        async function enablePiP() {
+          try {
+            const video = await waitForVideoReady();
+            if (!video) return console.warn("No video element available yet.");
+            if (document.pictureInPictureElement) return;
+            if (!pipEnabled) {
+              await video.requestPictureInPicture();
+              pipEnabled = true;
               if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(
-                  JSON.stringify({ action: "meetingEnded" })
+                  JSON.stringify({ pip: "entered" })
                 );
               } else {
                 console.log("⚠️ ReactNativeWebView not found");
               }
+              console.log("✅ PiP enabled");
             }
-            disablePiP();
-          });
-
-          // --- Dynamic Resize Handler ---
-          const handleResize = () => {
-            const width = window.innerWidth;
-            const height = window.innerHeight;
-
-            client.updateVideoOptions({
-              viewSizes: {
-                default: { width: width * 1, height: height * 0.92 },
-                ribbon: { width: width * 1, height: height * 0.9 },
-              },
-            });
-
-            console.log("📱 Rotated/resized:", width, "x", height);
-          };
-
-          window.addEventListener("resize", handleResize);
-          handleResize();
-
-          let pipEnabled = false;
-          let zoomClientInstance = null; // store your Zoom meeting instance if needed
-
-          // --- Wait for video metadata before enabling PiP ---
-          async function waitForVideoReady() {
-            const video = document.querySelector("video");
-            if (!video) return null;
-            if (video.readyState >= 1) return video; // metadata loaded
-            return new Promise(resolve => {
-              video.addEventListener("loadedmetadata", () => resolve(video), { once: true });
-            });
+          } catch (err) {
+            console.error("PiP failed:", err);
           }
-
-          async function enablePiP() {
-            try {
-              const video = await waitForVideoReady();
-              if (!video) return console.warn("No video element available yet.");
-              if (document.pictureInPictureElement) return;
-              if (!pipEnabled) {
-                await video.requestPictureInPicture();
-                pipEnabled = true;
-                if (window.ReactNativeWebView) {
-                  window.ReactNativeWebView.postMessage(
-                    JSON.stringify({ pip: "entered" })
-                  );
-                } else {
-                  console.log("⚠️ ReactNativeWebView not found");
-                }
-                console.log("✅ PiP enabled");
-              }
-            } catch (err) {
-              console.error("PiP failed:", err);
-            }
-          }
-
-          async function disablePiP() {
-            try {
-              if (document.pictureInPictureElement) {
-                await document.exitPictureInPicture();
-                pipEnabled = false;
-                console.log("✅ PiP disabled");
-              }
-            } catch (err) {
-              console.error("Exit PiP failed:", err);
-            }
-          }
-
-          // ✅ Prevent PiP on first load
-          window.onload = () => {
-            pipEnabled = false;
-            disablePiP();
-            console.log("🔹 PiP is disabled on first load");
-          };
-
-          // ✅ React Native bridge access
-          window.enablePiP = enablePiP;
-          window.disablePiP = disablePiP;
-
-          // ✅ Auto-enable PiP when app backgrounds (optional)
-          document.addEventListener("visibilitychange", () => {
-            if (document.hidden) enablePiP();
-          });
-
-          function hideZoomTopToolbar() {
-            const selectors = [
-              '.zoom-MuiToolbar-root',     // The whole top bar container
-              '.zoom-MuiTabs-root',        // View mode tabs
-              '[title="Meeting Information"]', // Info icon button
-              '[aria-label="See apps that are accessing your meeting content"]', // Marketplace icon
-              '.zoommtg-drag-video'        // Drag bar
-            ];
-
-            selectors.forEach(sel => {
-              document.querySelectorAll(sel).forEach(el => {
-                el.style.display = 'none';
-                el.style.visibility = 'hidden';
-                el.style.height = '0';
-                el.style.pointerEvents = 'none';
-              });
-            });
-          }
-
-          // Initial removal after joining
-          setTimeout(hideZoomTopToolbar, 2000);
-
-          // Watch for reinjection
-          const observer2 = new MutationObserver(() => hideZoomTopToolbar());
-          observer2.observe(document.body, { childList: true, subtree: true });
-
-          // window.addEventListener("orientationchange", handleOrientationChange);
-          // window.addEventListener("resize", handleOrientationChange);
-
-          // function handleOrientationChange() {
-          //   console.log("Orientation:", screen.orientation.type);
-          //   restartCamera();
-          // }
-
-        } catch (error) {
-          console.error("❌ Error joining meeting:", error);
-          window.ReactNativeWebView.postMessage(
-            JSON.stringify({ action: "meetingEnded" })
-          );
         }
+
+        async function disablePiP() {
+          try {
+            if (document.pictureInPictureElement) {
+              await document.exitPictureInPicture();
+              pipEnabled = false;
+              console.log("✅ PiP disabled");
+            }
+          } catch (err) {
+            console.error("Exit PiP failed:", err);
+          }
+        }
+
+        // ✅ Prevent PiP on first load
+        window.onload = () => {
+          pipEnabled = false;
+          disablePiP();
+          console.log("🔹 PiP is disabled on first load");
+        };
+
+        // ✅ React Native bridge access
+        window.enablePiP = enablePiP;
+        window.disablePiP = disablePiP;
+
+        // ✅ Auto-enable PiP when app backgrounds (optional)
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden) enablePiP();
+        });
+
+        function hideZoomTopToolbar() {
+          const selectors = [
+            '.zoom-MuiToolbar-root',     // The whole top bar container
+            '.zoom-MuiTabs-root',        // View mode tabs
+            '[title="Meeting Information"]', // Info icon button
+            '[aria-label="See apps that are accessing your meeting content"]', // Marketplace icon
+            '.zoommtg-drag-video'        // Drag bar
+          ];
+
+          selectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+              el.style.display = 'none';
+              el.style.visibility = 'hidden';
+              el.style.height = '0';
+              el.style.pointerEvents = 'none';
+            });
+          });
+        }
+
+        // Initial removal after joining
+        setTimeout(hideZoomTopToolbar, 2000);
+
+        // Watch for reinjection
+        const observer2 = new MutationObserver(() => hideZoomTopToolbar());
+        observer2.observe(document.body, { childList: true, subtree: true });
+
+        // window.addEventListener("orientationchange", handleOrientationChange);
+        // window.addEventListener("resize", handleOrientationChange);
+
+        // function handleOrientationChange() {
+        //   console.log("Orientation:", screen.orientation.type);
+        //   restartCamera();
+        // }
+
       })();
     </script>
   </body>
