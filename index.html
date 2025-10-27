@@ -459,6 +459,9 @@
 
         } catch (error) {
           console.error("❌ Error joining meeting:", error);
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({ action: "exitMeeting" })
+          );
         }
       })();
     </script>
